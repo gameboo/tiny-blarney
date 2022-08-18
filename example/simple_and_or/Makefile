@@ -1,13 +1,13 @@
-TOP=TinyBlarneyTest
+TOP=Main
 
 all: $(TOP)
 
 %: %.hs
-	ghc --make -j $<
+	ghc --make -i../../src -hidir hidir -odir odir -j $<
 
 .PHONY: clean mrproper
 clean:
-	rm -rf *.o *.hi
+	rm -rf hidir odir
 
 mrproper: clean
 	rm -f $(TOP)
