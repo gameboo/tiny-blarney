@@ -2,6 +2,7 @@
 
 module TinyBlarney.Core.BuildCircuit (
   Circuit (..)
+, prettyCircuit
 , buildCircuit
 ) where
 
@@ -46,11 +47,15 @@ getCircuitInterface = buildCircuitIfc 0
 -- produce Circuit Netlist and Interface
 
 data Circuit = Circuit { interface :: CircuitInterface
-                       , netlist   :: [Net] }
+                       , netlist   :: Netlist }
+
+prettyCircuit :: Circuit -> Doc
+prettyCircuit Circuit{..} = hang (text "Circuit") 2 (ifc $+$ nl)
+  where ifc = text "- interface:" <+> nest 2 (prettyCircuitInterface interface)
+        nl  = text "- netlist:" <+> nest 2 (prettyNetlist netlist)
+
 instance Show Circuit where
-  show Circuit{..} = render cDoc
-    where cDoc =     text "- interface:" $$ text (show interface)
-                 $+$ text "- netlist:" $+$ vcat (text <$> (show <$> netlist))
+  show = render . prettyCircuit
 
 buildCircuit :: (BuildCircuitIfc a, GetCircuitRoots a) => a -> Circuit
 buildCircuit f = Circuit { interface = ifc, netlist = nl }

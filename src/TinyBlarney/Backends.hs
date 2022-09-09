@@ -1,8 +1,5 @@
 module TinyBlarney.Backends (
-  writeVerilog
+  module TinyBlarney.Backends.Verilog
 ) where
 
-import TinyBlarney.Core
-
-writeVerilog :: String -> Circuit -> String
-writeVerilog nm c = nm ++ "\n" ++ show c ++ "\n- no verilog yet"
+import TinyBlarney.Backends.Verilog

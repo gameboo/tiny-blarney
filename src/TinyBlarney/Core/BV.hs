@@ -73,11 +73,12 @@ mkPrimitive prim rcvSigs ifc = case getPortOuts ifc of
         iId = unsafePerformIO $ atomicModifyIORef' instanceIdCnt \x -> (x+1, x)
 
 mkUnOpBV :: Primitive -> BV -> BV
-mkUnOpBV prim x = head $ mkPrimitive prim [([0], x)]
+mkUnOpBV prim x = head $ mkPrimitive prim [(Step 0, x)]
                                           (ifcUnaryOp $ unsafeBVBitWidth x)
 
 mkBinOpBV :: Primitive -> BV -> BV -> BV
-mkBinOpBV prim x y = head $ mkPrimitive prim [ ([0], x), ([1], y) ]
+mkBinOpBV prim x y = head $ mkPrimitive prim [ (Step 0, x)
+                                             , (Step 1, y) ]
                                              (ifcBinaryOp $ unsafeBVBitWidth x)
 
 mkConstantBV :: Integer -> BitWidth -> BV
