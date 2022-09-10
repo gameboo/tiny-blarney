@@ -16,6 +16,7 @@ module TinyBlarney.Core.CircuitInterface (
 , getPortOutBitWidth
 , queryCircuitInterfaceAt
 , queryCircuitInterfaceLeaves
+, getPorts
 , getPortIns
 , getPortOuts
 , getPortOutWidths
@@ -92,14 +93,25 @@ instance Semigroup CircuitInterfacePath where
 instance Monoid CircuitInterfacePath where
   mempty = NoStep
 
+-- | 'CircuitInterfacePath's are equatable
+instance Eq CircuitInterfacePath where
+  (n0 :<| s0) == (n1 :<| s1) = n0 == n1 && s0 == s1
+  NoStep == NoStep = True
+  _ == _ = False
+
+-- | 'CircuitInterfacePath's are ordered
+instance Ord CircuitInterfacePath where
+  compare (n0 :<| s0) (n1 :<| s1) | n0 == n1 = compare s0 s1
+                                  | otherwise = compare n0 n1
+  compare p0 p1 = error $    "cannot compare " ++ show p0 ++ " and " ++ show p1
+                          ++ " (different depths)"
+
 prettyCircuitInterfacePath :: CircuitInterfacePath -> Doc
 prettyCircuitInterfacePath (CircuitInterfacePath p) =
   text "::" PP.<> hcat (punctuate colon (int <$> toList p))
 
 instance Show CircuitInterfacePath where
   show = render . prettyCircuitInterfacePath
-
-type CircuitInterfaceQuery a = CircuitInterface -> Maybe a
 
 prettyCircuitInterface :: CircuitInterface -> Doc
 prettyCircuitInterface ifc = go NoStep ifc
@@ -117,6 +129,8 @@ prettyCircuitInterface ifc = go NoStep ifc
 
 instance Show CircuitInterface where
   show = render . prettyCircuitInterface
+
+type CircuitInterfaceQuery a = CircuitInterface -> Maybe a
 
 isCircuitInterfaceLeaf :: CircuitInterface -> Bool
 isCircuitInterfaceLeaf (Meta _ _) = False
@@ -153,6 +167,13 @@ queryCircuitInterfaceLeaves query ifc = go NoStep query ifc
           concat [go (stps :|> n) query x | (n, x) <- zip [0..] xs]
         go stps query x | isCircuitInterfaceLeaf x = [(stps, query x)]
         go _ _ _ = []
+
+getPorts :: CircuitInterface -> [(CircuitInterfacePath, CircuitInterface)]
+getPorts ifc =
+  [ (x, y) | (x, Just y) <- queryCircuitInterfaceLeaves exposePort ifc]
+  where exposePort p@(PortIn _ _) = Just p
+        exposePort p@(PortOut _ _) = Just p
+        exposePort _ = Nothing
 
 getPortIns :: CircuitInterface -> [(CircuitInterfacePath, CircuitInterface)]
 getPortIns ifc =

@@ -7,6 +7,7 @@
 
 module TinyBlarney.Core.BV (
   BV (..)
+, PathAndBV
 , bvBitWidth
 , unsafeBVBitWidth
 , mkConstantBV
@@ -38,9 +39,11 @@ import System.IO.Unsafe (unsafePerformIO)
 
 data BV = MkBV { instanceId :: InstanceId
                , primitive :: Primitive
-               , receivedSignals :: [(CircuitInterfacePath, BV)]
+               , receivedSignals :: [PathAndBV]
                , exposedPath :: CircuitInterfacePath }
         deriving Show
+
+type PathAndBV = (CircuitInterfacePath, BV)
 
 bvBitWidth :: BV -> Maybe BitWidth
 bvBitWidth bv = queryCircuitInterfaceAt getPortOutBitWidth ifc bv.exposedPath
@@ -59,7 +62,7 @@ instanceIdCnt = unsafePerformIO $ newIORef 0
 
 {-# NOINLINE mkPrimitive #-}
 -- | Helper function for creating an instance of a primitive component
-mkPrimitive :: Primitive -> [(CircuitInterfacePath, BV)] -> CircuitInterface
+mkPrimitive :: Primitive -> [PathAndBV] -> CircuitInterface
             -> [BV]
 mkPrimitive prim rcvSigs ifc = case getPortOuts ifc of
   [] -> [bv]
@@ -90,8 +93,8 @@ mkAndBV x y = mkBinOpBV (And $ unsafeBVBitWidth x) x y
 mkOrBV :: BV -> BV -> BV
 mkOrBV x y = mkBinOpBV (Or $ unsafeBVBitWidth x) x y
 
-mkCustomBV :: Primitive -> [(CircuitInterfacePath, BV)] -> [BV]
+mkCustomBV :: Primitive -> [PathAndBV] -> [BV]
 mkCustomBV p@Custom{..} rcvSigs = mkPrimitive p rcvSigs interface
 
-mkInterfaceBV :: CircuitInterface -> [BV]
-mkInterfaceBV ifc = mkPrimitive (Interface ifc) [] ifc
+mkInterfaceBV :: CircuitInterface -> [PathAndBV] -> [BV]
+mkInterfaceBV ifc rcvSigs = mkPrimitive (Interface ifc) rcvSigs ifc

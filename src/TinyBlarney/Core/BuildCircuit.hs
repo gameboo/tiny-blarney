@@ -3,6 +3,8 @@
 module TinyBlarney.Core.BuildCircuit (
   Circuit (..)
 , prettyCircuit
+, getCircuitInterface
+, buildCircuitWith
 , buildCircuit
 ) where
 
@@ -16,32 +18,46 @@ import GHC.TypeLits
 import Text.PrettyPrint hiding ((<>))
 
 --------------------------------------------------------------------------------
--- apply circuit function to get root BVs for a blarney circuit
+-- get a circuit interface for a circuit function based on its type signature
 
-class GetCircuitRoots t where
-  getCircuitRoots :: t -> [BV] -> [BV]
+class GetCircuitIfc t where
+  getCircuitIfc :: Int -> t -> CircuitInterface
 
-instance GetCircuitRoots (Bit n) where
-  getCircuitRoots (AsBit bv) [] = [bv]
+instance KnownNat n => GetCircuitIfc (Bit n) where
+  getCircuitIfc _ _ = PortOut "retVal" $ valueOf @n
 
-instance GetCircuitRoots t => GetCircuitRoots (Bit n -> t) where
-  getCircuitRoots f (bv : bvs) = getCircuitRoots (f $ AsBit bv) bvs
+instance (KnownNat n, GetCircuitIfc t) => GetCircuitIfc (Bit n -> t) where
+  getCircuitIfc argN f =    PortIn ("arg" ++ show argN) (valueOf @n)
+                         <> (getCircuitIfc (argN + 1) $ f undefined)
+
+getCircuitInterface :: GetCircuitIfc t => t -> CircuitInterface
+getCircuitInterface = getCircuitIfc 0
 
 --------------------------------------------------------------------------------
--- generate circuit interface for a blarney circuit
+-- apply circuit function to get root BVs for a blarney circuit
 
-class BuildCircuitIfc t where
-  buildCircuitIfc :: Int -> t -> CircuitInterface
+addOut :: CircuitInterfacePath -> ([PathAndBV], [BV]) -> BV
+       -> ([PathAndBV], [BV])
+addOut path (outs, roots) bv = ((path, bv):outs, bv:roots)
 
-instance KnownNat n => BuildCircuitIfc (Bit n) where
-  buildCircuitIfc _ _ = PortOut "retVal" $ valueOf @n
+addRoot :: ([PathAndBV], [BV]) -> BV -> ([PathAndBV], [BV])
+addRoot (outs, roots) bv = (outs, bv:roots)
 
-instance (KnownNat n, BuildCircuitIfc t) => BuildCircuitIfc (Bit n -> t) where
-  buildCircuitIfc argN f =    PortIn ("arg" ++ show argN) (valueOf @n)
-                           <> (buildCircuitIfc (argN + 1) $ f undefined)
+class GenCircuit t where
+  genCircuit :: t -> [BV] -> CircuitInterfacePath -> ([PathAndBV], [BV])
+             -> ([PathAndBV], [BV])
 
-getCircuitInterface :: BuildCircuitIfc t => t -> CircuitInterface
-getCircuitInterface = buildCircuitIfc 0
+instance GenCircuit (Bit n) where
+  genCircuit (AsBit bv) [] path acc = addOut path acc bv
+
+instance GenCircuit t => GenCircuit (Bit n -> t) where
+  -- XXX should traverse an ifc and update path as we go
+  genCircuit f (bv : bvs) path acc = genCircuit (f $ AsBit bv) bvs path acc
+
+getCircuitRoots :: GenCircuit a => a -> CircuitInterface -> [BV]
+getCircuitRoots f ifc = rootBVs
+  where (outBVs, rootBVs) = genCircuit f inBVs NoStep ([], [])
+        inBVs = mkInterfaceBV ifc outBVs
 
 --------------------------------------------------------------------------------
 -- produce Circuit Netlist and Interface
@@ -57,8 +73,9 @@ prettyCircuit Circuit{..} = hang (text "Circuit") 2 (ifc $+$ nl)
 instance Show Circuit where
   show = render . prettyCircuit
 
-buildCircuit :: (BuildCircuitIfc a, GetCircuitRoots a) => a -> Circuit
-buildCircuit f = Circuit { interface = ifc, netlist = nl }
-  where ifc = getCircuitInterface f
-        ifcBVs = mkInterfaceBV $ flipCircuitInterface ifc
-        nl = flattenFromRoots $ getCircuitRoots f ifcBVs
+buildCircuitWith :: GenCircuit a => CircuitInterface -> a -> Circuit
+buildCircuitWith ifc f = Circuit { interface = ifc, netlist = nl }
+  where nl = flattenFromRoots $ getCircuitRoots f (flipCircuitInterface ifc)
+
+buildCircuit :: (GetCircuitIfc a, GenCircuit a) => a -> Circuit
+buildCircuit f = buildCircuitWith (getCircuitInterface f) f
