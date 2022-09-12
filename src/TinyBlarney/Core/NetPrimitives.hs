@@ -6,6 +6,7 @@ module TinyBlarney.Core.NetPrimitives (
   InstanceId
 , Net (..)
 , prettyNet
+, NetlistArray
 , Netlist (..)
 , prettyNetlist
 , NetPort (..)
@@ -55,8 +56,10 @@ prettyNet MkNet{..} = text "Net#" PP.<> int instanceId <+> sep xs
 instance Show Net where
   show = render . prettyNet
 
+-- | the 'NetlistArray' type synonym, an 'Array InstanceId Net'
+type NetlistArray = Array InstanceId Net
 -- | A 'Netlist', represented as an 'Array InstanceId Net'
-newtype Netlist = Netlist (Array InstanceId Net)
+newtype Netlist = Netlist NetlistArray
 
 prettyNetlist :: Netlist -> Doc
 prettyNetlist (Netlist nl) = vcat (prettyNet <$> elems nl)

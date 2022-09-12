@@ -15,26 +15,31 @@ import qualified Data.Sequence as Seq
 import Data.Array.ST
 import Data.Array.Unboxed
 import Control.Monad
-import Control.Monad.Trans
-import Control.Monad.Trans.State
-import Control.Monad.Trans.Writer
-import Data.Functor.Identity
+import Control.Monad.Identity
+import Control.Monad.State
+import Control.Monad.Writer
 import qualified Data.IntSet as IntSet
 
 --------------------------------------------------------------------------------
 -- flattening of the untyped bitvector representation to the netlist graph
 -- representation
 
-type FlattenBV = StateT FlattenS (WriterT FlattenW Identity)
-
 type FlattenS = IntSet.IntSet
 
 type FlattenW = Seq.Seq Net
 
+newtype FlattenBV a = FlattenBV {
+  unFlattenBV :: StateT FlattenS (WriterT FlattenW Identity) a
+} deriving ( Functor
+           , Applicative
+           , Monad
+           , MonadWriter FlattenW
+           , MonadState FlattenS )
+
 execFlattenBV :: FlattenBV a -> FlattenS -> (FlattenS, FlattenW, a)
 execFlattenBV m s0 = (s, w, x)
   where f = runIdentity . runWriterT . (flip runStateT) s0
-        ((x, s), w) = f m
+        ((x, s), w) = f $ unFlattenBV m
 
 getVisited :: FlattenBV FlattenS
 getVisited = get
@@ -43,7 +48,7 @@ putVisited :: FlattenS -> FlattenBV ()
 putVisited = put
 
 addNet :: Net -> FlattenBV ()
-addNet = lift . tell . Seq.singleton
+addNet = tell . Seq.singleton
 
 flattenBV :: BV -> FlattenBV NetPort
 flattenBV MkBV{ primitive = p@(Constant _ _) } = return $ NetPortInlined p []

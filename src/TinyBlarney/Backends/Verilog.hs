@@ -1,4 +1,6 @@
-{-# LANGUAGE RecordWildCards #-}
+{-# LANGUAGE BlockArguments      #-}
+{-# LANGUAGE RecordWildCards     #-}
+{-# LANGUAGE OverloadedRecordDot #-}
 
 module TinyBlarney.Backends.Verilog (
   writeVerilogModule
@@ -6,13 +8,20 @@ module TinyBlarney.Backends.Verilog (
 
 import TinyBlarney.Core
 
+import Data.Array
 import Data.Maybe
+import Data.Foldable
+import qualified Data.Sequence as Seq
 import Control.Monad.Identity
-import Control.Monad.Trans.Writer
-import Control.Monad.Trans.Reader
+import Control.Monad.Writer hiding (Product)
+import Control.Monad.Reader
 import Numeric (showHex)
 import Text.PrettyPrint hiding ((<>))
 import qualified Text.PrettyPrint as PP ((<>))
+
+-- | local error helper function
+err :: String -> a
+err m = error $ "TinyBlarney.Backends.Verilog: " ++ m
 
 -- exported API
 --------------------------------------------------------------------------------
@@ -35,19 +44,23 @@ prettyVerilogModule nm Circuit{..} =     header
                                      $+$ instances
                                      $+$ alwaysBlock
                                      $+$ footer
-  where header =     text "module" <+> text nm
-                 <+> parens (pCircuitInterface interface) PP.<> semi
-        footer = text "endmodule"
-        declarations = sep (catMaybes $ map decl netVs)
-        instances = sep (catMaybes $ map inst netVs)
-        alwaysBlock =
-              text "always" <+> char '@' PP.<> parens (text "posedge clock")
-                            <+> text "begin"
-          $+$ text "if (reset) begin" $+$ sep (catMaybes $ map rst netVs)
-          $+$ text "end else begin" $+$ sep (catMaybes $ map alws netVs)
-          $+$ text "end"
-          $+$ text "end"
-        netVs = toNetVerilogs netlist
+  where
+  header = text "module" <+> text nm
+                         <+> parens (pCircuitInterface interface) PP.<> semi
+  declarations = sep (catMaybes $ map decl netDocs)
+  instances = sep (catMaybes $ map inst netDocs)
+  alwaysBlock = if null alwsDocs then empty else
+        text "always" <+> char '@' PP.<> parens (text "posedge clock")
+                      <+> text "begin"
+    $+$ wrapRstBlock (sep alwsDocs)
+    $+$ text "end"
+    where alwsDocs = catMaybes $ alws <$> netDocs
+          rstDocs = catMaybes $ rst <$> netDocs
+          wrapRstBlock blk = if null rstDocs then blk else
+                text "if (reset) begin" $+$ sep rstDocs
+            $+$ text "end else begin" $+$ blk $+$ text "end"
+  footer = text "endmodule"
+  netDocs = toList $ genAllNetDocs netlist
 
 pCircuitInterface :: CircuitInterface -> Doc
 pCircuitInterface (PortIn nm w) =
@@ -57,14 +70,37 @@ pCircuitInterface (PortOut nm w) =
 pCircuitInterface (Product xs) = argStyle (pCircuitInterface <$> xs)
 pCircuitInterface _ = empty
 
--- NetVerilog helper type
-data NetVerilog = NetVerilog { decl :: Maybe Doc
-                             , inst :: Maybe Doc
-                             , alws :: Maybe Doc
-                             , rst  :: Maybe Doc }
+-- NetDocs helper type
+data NetDocs = NetDocs { decl :: Maybe Doc
+                       , inst :: Maybe Doc
+                       , alws :: Maybe Doc
+                       , rst  :: Maybe Doc } deriving Show
 
-type NetVeriloger = ReaderT Netlist (WriterT [NetVerilog] Identity)
-toNetVerilogs :: Netlist -> [NetVerilog]
-toNetVerilogs ns = runIdentity $ execWriterT $ runReaderT netVeriloger ns
-  where netVeriloger :: NetVeriloger ()
-        netVeriloger = do return ()
+newtype GenNetDocs a = GenNetDocs {
+  unGenNetDocs :: ReaderT NetlistArray (WriterT (Seq.Seq NetDocs) Identity) a
+} deriving ( Functor
+           , Applicative
+           , Monad
+           , MonadReader NetlistArray
+           , MonadWriter (Seq.Seq NetDocs) )
+
+genAllNetDocs :: Netlist -> Seq.Seq NetDocs
+genAllNetDocs (Netlist nl) =
+  runIdentity $ execWriterT (runReaderT (unGenNetDocs gen) nl)
+  where gen = mapM genNetDocs (elems nl)
+
+addNetDocs :: NetDocs -> GenNetDocs ()
+addNetDocs = tell . Seq.singleton
+
+genNetDocs :: Net -> GenNetDocs ()
+genNetDocs n = addNetDocs case n.primitive of
+  Constant k w -> dfltNDs { decl = Just $ text "// TODO: constant declaration"}
+  And w -> dfltNDs { decl = Just $ text "// TODO: And declaration"}
+  Or w -> dfltNDs { decl = Just $ text "// TODO: Or declaration"}
+  Interface ifc -> dfltNDs
+  p -> err $ "Primitive " ++ show p ++ "not supported"
+  where
+  dfltNDs = NetDocs { decl = Nothing
+                    , inst = Nothing
+                    , alws = Nothing
+                    , rst  = Nothing }
