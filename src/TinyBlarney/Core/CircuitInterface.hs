@@ -107,8 +107,8 @@ instance Ord CircuitInterfacePath where
                           ++ " (different depths)"
 
 prettyCircuitInterfacePath :: CircuitInterfacePath -> Doc
-prettyCircuitInterfacePath (CircuitInterfacePath p) =
-  text "::" PP.<> hcat (punctuate colon (int <$> toList p))
+prettyCircuitInterfacePath (CircuitInterfacePath p) = hcat (step <$> toList p)
+  where step x = char 's' PP.<> int x
 
 instance Show CircuitInterfacePath where
   show = render . prettyCircuitInterfacePath

@@ -4,6 +4,7 @@
 
 module TinyBlarney.Core.NetPrimitives (
   InstanceId
+, NetOutput
 , Net (..)
 , prettyNet
 , NetlistArray
@@ -26,14 +27,19 @@ import qualified Text.PrettyPrint as PP ((<>))
 
 import TinyBlarney.Core.CircuitInterface
 
-type InstanceId = Int
+-- | local error helper function
+err :: String -> a
+err m = error $ "TinyBlarney.Core.NetPrimitives: " ++ m
 
-data NetPort = NetPort InstanceId CircuitInterfacePath
+type InstanceId = Int
+type NetOutput = (InstanceId, CircuitInterfacePath)
+
+data NetPort = NetPort NetOutput
              | NetPortInlined Primitive [NetPort]
 
 prettyNetPort :: NetPort -> Doc
-prettyNetPort (NetPort i cPath) =
-  text "Net#" PP.<> int i PP.<> prettyCircuitInterfacePath cPath
+prettyNetPort (NetPort (i, cPath)) =
+  text "net" PP.<> int i PP.<> prettyCircuitInterfacePath cPath
 prettyNetPort (NetPortInlined p ins) =
   text "Op>" PP.<> prettyPrimitive p PP.<> sep (prettyNetPort <$> ins)
 
@@ -45,13 +51,12 @@ data Net = MkNet { instanceId :: InstanceId
                  , inputPorts :: [NetPort] }
 
 prettyNet :: Net -> Doc
-prettyNet MkNet{..} = text "Net#" PP.<> int instanceId <+> sep xs
+prettyNet MkNet{..} = text "net" PP.<> int instanceId <+> sep xs
   where xs = [ prettyPrimitive primitive
              , case inputPorts of
                  [] -> text "No Inputs"
                  ys -> text "Inputs"
-                       <+> braces (nest 2 (sep (prettyNetPort <$> ys)))
-             ]
+                       <+> braces (nest 2 (sep (prettyNetPort <$> ys))) ]
 
 instance Show Net where
   show = render . prettyNet
@@ -104,6 +109,8 @@ instance Show Primitive where
 data PrimitiveInfo = MkPrimitiveInfo {
   -- | the circuit interface of the primitive (its inputs and outputs...)
   interface :: CircuitInterface
+  -- | get the primitive's output paths
+, outputPaths :: [CircuitInterfacePath]
   -- | the pretty printing 'Doc' for the primitive
 , prettyDoc :: Doc
 }
@@ -133,18 +140,22 @@ pDoc d ifc =
 primitiveInfo :: Primitive -> PrimitiveInfo
 primitiveInfo (Constant k w) = MkPrimitiveInfo {
   interface = ifc
+, outputPaths = [Step 0]
 , prettyDoc = pDoc (text "Constant " <+> integer k) ifc
 } where ifc = PortOut "out" w
 primitiveInfo (And w) = MkPrimitiveInfo {
   interface = ifc
+, outputPaths = [Step 2]
 , prettyDoc = pDoc (text "And") ifc
 } where ifc = ifcBinaryOp w
 primitiveInfo (Or w) = MkPrimitiveInfo {
-  interface = ifcBinaryOp w
+  interface = ifc
+, outputPaths = [Step 2]
 , prettyDoc = pDoc (text "Or") ifc
 } where ifc = ifcBinaryOp w
 primitiveInfo p@Custom{..} = MkPrimitiveInfo {
   interface = p.interface
+, outputPaths = err "TODO, Custom primitive output paths"
 , prettyDoc =
     let nl = case mNetlist of Nothing -> text "No Netlist"
                               Just _ -> text "Some Netlist"
@@ -152,5 +163,6 @@ primitiveInfo p@Custom{..} = MkPrimitiveInfo {
 }
 primitiveInfo (Interface ifc) = MkPrimitiveInfo {
   interface = ifc
+, outputPaths = err "TODO, Interface primitive output paths"
 , prettyDoc = pDoc (text "Interface") ifc
 }

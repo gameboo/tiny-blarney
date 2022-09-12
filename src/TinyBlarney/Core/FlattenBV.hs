@@ -60,7 +60,7 @@ flattenBV bv = do
     addNet MkNet { instanceId = bv.instanceId
                  , primitive  = bv.primitive
                  , inputPorts = inPorts }
-  return $ NetPort bv.instanceId bv.exposedPath
+  return $ NetPort (bv.instanceId, bv.exposedPath)
 
 flattenBV_ :: BV -> FlattenBV ()
 flattenBV_ bv = flattenBV bv >> return ()
