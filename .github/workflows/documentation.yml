@@ -1,0 +1,47 @@
+name: Generate and deploy documentation for TinyBlarney
+
+on:
+  push:
+    branches: [ main ]
+
+jobs:
+
+  GenDoc:
+    name: Generate documentation
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v2
+    - uses: haskell/actions/setup@v2
+    - name: Generate documentation
+      run: |
+       haddock --source-module=$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/tree/$GITHUB_SHA/%{FILE} \
+               --source-entity=$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/tree/$GITHUB_SHA/%{FILE}#L%{LINE} \
+               --title=TinyBlarney \
+               --html \
+               --odir doc \
+               $(find src/ -name "*.hs")
+    - name: Upload documentation artifact
+      uses: actions/upload-artifact@v2
+      with:
+        name: doc
+        path: doc
+
+  PublishDoc:
+    name: Publish documentation
+    needs: GenDoc
+    runs-on: ubuntu-latest
+    steps:
+    - name: Download documentation artifact
+      uses: actions/download-artifact@v2
+      with:
+        name: doc
+    - name: Deploy documentation
+      run: |
+        git init
+        git checkout --orphan haddock
+        git remote add origin https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/$GITHUB_REPOSITORY
+        git config user.name the-tiny-blarney-fairy
+        git config user.email the-tiny-blarney-fairy@users.noreply.github.com
+        git add --all
+        git commit -m "deploy documentation for $GITHUB_SHA"
+        git push origin -f haddock

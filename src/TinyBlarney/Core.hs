@@ -1,3 +1,16 @@
+{-# OPTIONS_HADDOCK prune #-}
+
+{- |
+
+Module      : TinyBlarney.Core
+Description : TinyBlarney's internal "core" module
+Stability   : experimental
+
+This TinyBlarney core module contains the internals of the library. It exports
+a subset of relevant functionalities.
+
+-}
+
 module TinyBlarney.Core (
   module TinyBlarney.Core.Bit
 , module TinyBlarney.Core.BuildCircuit

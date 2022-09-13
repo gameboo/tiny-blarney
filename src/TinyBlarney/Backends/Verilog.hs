@@ -2,6 +2,16 @@
 {-# LANGUAGE RecordWildCards     #-}
 {-# LANGUAGE OverloadedRecordDot #-}
 
+{- |
+
+Module      : TinyBlarney.Backends.Verilog
+Description : TinyBlarney's verilog backend
+Stability   : experimental
+
+This backend generates verilog for a given TinyBlarney 'Circuit'.
+
+-}
+
 module TinyBlarney.Backends.Verilog (
   writeVerilogModule
 ) where
