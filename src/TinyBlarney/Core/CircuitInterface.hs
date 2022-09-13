@@ -152,11 +152,11 @@ queryCircuitInterfaceAt :: CircuitInterfaceQuery a
                         -> CircuitInterface
                         -> CircuitInterfacePath
                         -> Maybe a
-queryCircuitInterfaceAt query x NoStep = query x
-queryCircuitInterfaceAt query (Meta _ x) steps =
-  queryCircuitInterfaceAt query x steps
 queryCircuitInterfaceAt query (Product xs) (n :<| steps) | n < length xs =
   queryCircuitInterfaceAt query (xs !! n) steps
+queryCircuitInterfaceAt query (Meta _ x) steps =
+  queryCircuitInterfaceAt query x steps
+queryCircuitInterfaceAt query x NoStep = query x
 queryCircuitInterfaceAt _ _ _ = Nothing
 
 queryCircuitInterfaceLeaves :: CircuitInterfaceQuery a -> CircuitInterface
