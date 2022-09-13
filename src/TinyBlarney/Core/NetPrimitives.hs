@@ -14,15 +14,12 @@ module TinyBlarney.Core.NetPrimitives (
 , prettyNetPort
 , Primitive (..)
 , prettyPrimitive
-, PrimName
---, PrimitiveInfo (..)
 , primInterface
 , primInputPaths
 , primOutputPaths
 , primPretty
 , ifcUnaryOp
 , ifcBinaryOp
---, primitiveInfo
 ) where
 
 import Data.Array
@@ -35,25 +32,43 @@ import TinyBlarney.Core.CircuitInterface
 err :: String -> a
 err m = error $ "TinyBlarney.Core.NetPrimitives: " ++ m
 
+--------------------------------------------------------------------------------
+
+-- | A type to represent a unique identifier for 'BV's and 'Net's.
+--   'InstanceId' is defined as 'Int'
 type InstanceId = Int
+
+-- | A type to identify a 'Net' output. 'NetOutput' is a
+--   '(InstanceId, CircuitInterfacePath)' pair.
 type NetOutput = (InstanceId, CircuitInterfacePath)
 
-data NetPort = NetPort NetOutput
-             | NetPortInlined Primitive [NetPort]
+-- | A type to represent a 'Net' input.
+data NetPort =
+    -- | Constructor wrapping another 'Net''s output.
+    NetPort NetOutput
+    -- | Constructor inlining a 'Primitive' operation and a '[NetPort]' list of
+    --   its inputs.
+  | NetPortInlined Primitive [NetPort]
 
+-- | Pretty print a 'NetPort'.
 prettyNetPort :: NetPort -> Doc
 prettyNetPort (NetPort (i, cPath)) =
   text "net" PP.<> int i PP.<> prettyCircuitInterfacePath cPath
 prettyNetPort (NetPortInlined p ins) =
   text "Op" PP.<> parens (primPretty p PP.<> sep (prettyNetPort <$> ins))
 
+-- | Show instance for 'NetPort'.
 instance Show NetPort where
   show = render . prettyNetPort
 
-data Net = MkNet { instanceId :: InstanceId
-                 , primitive  :: Primitive
-                 , inputPorts :: [NetPort] }
+-- | A type to represent a netlist node.
+data Net =
+  MkNet { instanceId :: InstanceId -- ^ a unique instance identifier
+        , primitive  :: Primitive  -- ^ a primitive operation
+        , inputPorts :: [NetPort]  -- ^ a list of inputs
+        }
 
+-- | Pretty print a 'Net'.
 prettyNet :: Net -> Doc
 prettyNet MkNet{..} = text "net" PP.<> int instanceId <+> sep xs
   where xs = [ primPretty primitive
@@ -62,67 +77,101 @@ prettyNet MkNet{..} = text "net" PP.<> int instanceId <+> sep xs
                  ys -> text "Inputs"
                        <+> braces (nest 2 (sep (prettyNetPort <$> ys))) ]
 
+-- | Show instance for 'Net'.
 instance Show Net where
   show = render . prettyNet
 
--- | the 'NetlistArray' type synonym, an 'Array InstanceId Net'
+-- | A 'NetlistArray' type synonym for 'Array InstanceId Net'.
 type NetlistArray = Array InstanceId Net
--- | A 'Netlist', represented as an 'Array InstanceId Net'
+-- | A 'Netlist', represented as an 'Array InstanceId Net'.
 newtype Netlist = Netlist NetlistArray
 
+-- | Pretty print a 'Netlist'.
 prettyNetlist :: Netlist -> Doc
 prettyNetlist (Netlist nl) = vcat (prettyNet <$> elems nl)
 
+-- | Show instance for 'Netlist'.
 instance Show Netlist where
   show = render . prettyNetlist
 
-type PrimName = String
-
--- | tiny-blarney's language primitives
+-- | Available primitive operations.
 data Primitive =
-    -- | sized constant value
+
+    -- | @Constant k w@: a @w@-sized constant value @k@
+    --
+    --   [__inputs__]  no inputs
+    --   [__outputs__] the @w@-bit constant value @k@
     Constant Integer BitWidth
-    -- | logical and of 2 inputs
+
+    -- | @And w@: a @w@-sized bitwise "and" of 2 operands
+    --
+    --   [__inputs__]  @[x, y]@, 2 @w@-bit operands
+    --   [__outputs__] the @w@-bit bitwise "and" of @x@ and @y@
   | And BitWidth
-    -- | logical or of 2 inputs
+
+    -- | @Or w@: a @w@-sized bitwise "or" of 2 operands
+    --
+    --   [__inputs__]  @[x, y]@, 2 @w@-bit operands
+    --   [__outputs__] the @w@-bit bitwise "or" of @x@ and @y@
   | Or BitWidth
-    -- | custom primitive with possible custom netlist
-  | Custom { name :: PrimName
-           , interface :: CircuitInterface
-           , mNetlist :: Maybe Netlist }
-    -- | a circuit interface primitive
+
+    -- | A custom component
+  | Custom { name :: String -- ^ component's name
+           , interface :: CircuitInterface -- ^ component's interface
+           , mNetlist :: Maybe Netlist -- ^ potential netlist for the component
+           }
+
+    -- | A circuit interface primitive
     --   BVs with this primitive are flatten roots or flatten leaves based on
-    --   the polarity of the port described
+    --   the polarity of the port described.
+    --   The intended use is to have a single Interface primitive per circuit,
+    --   and have a rich associated 'CircuitInterface'.
     --   The embedded 'CircuitInterface''s polarity can be flipped to obtain the
     --   circuit's interface as perceived from the outside of the circuit
     --   (example:
-    --     A ciruit with an Interface primitive with a PortIn "A" and a PortOut
-    --     "B" produces values at A and consumes values at B.
-    --     The environment using this circuit will produce into it through B and
-    --     consume out of it from A.
+    --     From a circuit environment's perspective (the context instanciating
+    --     a circuit), an Interface with a PortIn "A" and a PortOut "B"
+    --     describes a circuit which will consume values from its environment
+    --     through its "A" port, and produce values through its "B" port.
+    --     From within that circuit, the Interface should be flipped, and
+    --     present "A" as a PortOut which produces values for the rest of the
+    --     netlist to consume, and "B" as a PortIn which consumes values
+    --     produced by the rest of the nets in the netlist.
+    --     A 'Primitive' is associated with nets of a netlist, and for this
+    --     reason, it is expected that the 'CircuitInterface' parameter to this
+    --     constructor be the one with the second described polarity.
     --   )
   | Interface CircuitInterface
 
+-- | Pretty print a 'Primitive'.
 prettyPrimitive :: Primitive -> Doc
 prettyPrimitive = primPretty
 
+-- | Show instance for 'Primitive'.
 instance Show Primitive where
   show = render . primPretty
 
--- | general information on a primitive
+-- | General information on a primitive.
 data PrimitiveInfo = MkPrimitiveInfo {
-  -- | the circuit interface of the primitive (its inputs and outputs...)
+  -- | The circuit interface of the primitive (its inputs and outputs...).
   interface :: CircuitInterface
-  -- | the pretty printing 'Doc' for the primitive
+  -- | The pretty printing 'Doc' for the primitive.
 , prettyDoc :: Doc
 }
 
+-- | Get the 'CircuitInterface' of a 'Primitive'.
 primInterface :: Primitive -> CircuitInterface
 primInterface prim = (primInfo prim).interface
+
+-- | Get the 'CircuitInterfacePath's of a 'Primitive''s inputs.
 primInputPaths :: Primitive -> [CircuitInterfacePath]
 primInputPaths = getPortInPaths . primInterface
+
+-- | Get the 'CircuitInterfacePath's of a 'Primitive''s outputs.
 primOutputPaths :: Primitive -> [CircuitInterfacePath]
 primOutputPaths = getPortOutPaths . primInterface
+
+-- | Pretty print a 'Primitive'.
 primPretty :: Primitive -> Doc
 primPretty = prettyDoc . primInfo
 
