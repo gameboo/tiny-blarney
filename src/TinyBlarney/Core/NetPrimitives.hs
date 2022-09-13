@@ -15,10 +15,14 @@ module TinyBlarney.Core.NetPrimitives (
 , Primitive (..)
 , prettyPrimitive
 , PrimName
-, PrimitiveInfo (..)
+--, PrimitiveInfo (..)
+, primInterface
+, primInputPaths
+, primOutputPaths
+, primPretty
 , ifcUnaryOp
 , ifcBinaryOp
-, primitiveInfo
+--, primitiveInfo
 ) where
 
 import Data.Array
@@ -41,7 +45,7 @@ prettyNetPort :: NetPort -> Doc
 prettyNetPort (NetPort (i, cPath)) =
   text "net" PP.<> int i PP.<> prettyCircuitInterfacePath cPath
 prettyNetPort (NetPortInlined p ins) =
-  text "Op>" PP.<> prettyPrimitive p PP.<> sep (prettyNetPort <$> ins)
+  text "Op" PP.<> parens (primPretty p PP.<> sep (prettyNetPort <$> ins))
 
 instance Show NetPort where
   show = render . prettyNetPort
@@ -52,7 +56,7 @@ data Net = MkNet { instanceId :: InstanceId
 
 prettyNet :: Net -> Doc
 prettyNet MkNet{..} = text "net" PP.<> int instanceId <+> sep xs
-  where xs = [ prettyPrimitive primitive
+  where xs = [ primPretty primitive
              , case inputPorts of
                  [] -> text "No Inputs"
                  ys -> text "Inputs"
@@ -100,36 +104,40 @@ data Primitive =
   | Interface CircuitInterface
 
 prettyPrimitive :: Primitive -> Doc
-prettyPrimitive = prettyDoc . primitiveInfo
+prettyPrimitive = primPretty
 
 instance Show Primitive where
-  show = render . prettyPrimitive
+  show = render . primPretty
 
 -- | general information on a primitive
 data PrimitiveInfo = MkPrimitiveInfo {
   -- | the circuit interface of the primitive (its inputs and outputs...)
   interface :: CircuitInterface
-  -- | get the primitive's output paths
-, outputPaths :: [CircuitInterfacePath]
   -- | the pretty printing 'Doc' for the primitive
 , prettyDoc :: Doc
 }
 
+primInterface :: Primitive -> CircuitInterface
+primInterface prim = (primInfo prim).interface
+primInputPaths :: Primitive -> [CircuitInterfacePath]
+primInputPaths = getPortInPaths . primInterface
+primOutputPaths :: Primitive -> [CircuitInterfacePath]
+primOutputPaths = getPortOutPaths . primInterface
+primPretty :: Primitive -> Doc
+primPretty = prettyDoc . primInfo
+
 -- | 'CircuitInterface' for 1-input 1-output circuits a.k.a. unary op.
 ifcUnaryOp :: BitWidth -> CircuitInterface
-ifcUnaryOp w = PortIn "in" w <> PortOut "out" w
---ifcUnaryOp w = Product [ metaDocString "Unary operation input" $
---                           PortIn "in" w
---                       , metaDocString "Unary operation output" $
---                           PortOut "out" w ]
+ifcUnaryOp w =
+  Product [ metaDocString "Unary operation input"  $ PortIn   "in" w
+          , metaDocString "Unary operation output" $ PortOut "out" w ]
 
 -- | 'CircuitInterface' for 2-inputs 1-output circuits a.k.a. binary op.
 ifcBinaryOp :: BitWidth -> CircuitInterface
-ifcBinaryOp w = PortIn "in0" w <> PortIn "in1" w <> PortOut "out" w
---ifcBinaryOp w = Product [ metaDocString "Binary operation inputs" $
---                            PortIn "in0" w <> PortIn "in1" w
---                        , metaDocString "Binary operation output" $
---                            PortOut "out" w ]
+ifcBinaryOp w =
+  Product [ metaDocString "Binary operation inputs" $
+              PortIn "in0" w <> PortIn "in1" w
+          , metaDocString "Binary operation output" $ PortOut "out" w ]
 
 -- | primitive doc pretty printing helper
 pDoc :: Doc -> CircuitInterface -> Doc
@@ -137,32 +145,27 @@ pDoc d ifc =
   text "Prim " <> braces (sep [d, parens $ prettyCircuitInterface ifc])
 
 -- | document 'PrimitiveInfo' for any 'Primitive'
-primitiveInfo :: Primitive -> PrimitiveInfo
-primitiveInfo (Constant k w) = MkPrimitiveInfo {
+primInfo :: Primitive -> PrimitiveInfo
+primInfo (Constant k w) = MkPrimitiveInfo {
   interface = ifc
-, outputPaths = [Step 0]
 , prettyDoc = pDoc (text "Constant " <+> integer k) ifc
 } where ifc = PortOut "out" w
-primitiveInfo (And w) = MkPrimitiveInfo {
+primInfo (And w) = MkPrimitiveInfo {
   interface = ifc
-, outputPaths = [Step 2]
 , prettyDoc = pDoc (text "And") ifc
 } where ifc = ifcBinaryOp w
-primitiveInfo (Or w) = MkPrimitiveInfo {
+primInfo (Or w) = MkPrimitiveInfo {
   interface = ifc
-, outputPaths = [Step 2]
 , prettyDoc = pDoc (text "Or") ifc
 } where ifc = ifcBinaryOp w
-primitiveInfo p@Custom{..} = MkPrimitiveInfo {
+primInfo p@Custom{..} = MkPrimitiveInfo {
   interface = p.interface
-, outputPaths = err "TODO, Custom primitive output paths"
 , prettyDoc =
     let nl = case mNetlist of Nothing -> text "No Netlist"
                               Just _ -> text "Some Netlist"
     in pDoc (text "Custom: " <+> text name <+> char '-' <+> nl) p.interface
 }
-primitiveInfo (Interface ifc) = MkPrimitiveInfo {
+primInfo (Interface ifc) = MkPrimitiveInfo {
   interface = ifc
-, outputPaths = err "TODO, Interface primitive output paths"
 , prettyDoc = pDoc (text "Interface") ifc
 }

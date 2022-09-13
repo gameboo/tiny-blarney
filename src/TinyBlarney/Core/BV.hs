@@ -26,6 +26,10 @@ import Data.Maybe
 import Data.IORef
 import System.IO.Unsafe (unsafePerformIO)
 
+-- | local error helper function
+err :: String -> a
+err m = error $ "TinyBlarney.Core.BV: " ++ m
+
 --------------------------------------------------------------------------------
 -- untyped bitvector
 -- A BV refer to one output port of a circuit description of a primitive.
@@ -47,13 +51,13 @@ type PathAndBV = (CircuitInterfacePath, BV)
 
 bvBitWidth :: BV -> Maybe BitWidth
 bvBitWidth bv = queryCircuitInterfaceAt getPortOutBitWidth ifc bv.exposedPath
-  where ifc = (primitiveInfo $ bv.primitive).interface
+  where ifc = primInterface bv.primitive
 
 unsafeBVBitWidth :: BV -> BitWidth
-unsafeBVBitWidth bv = fromMaybe err $ bvBitWidth bv
-  where err = error $ "could not extract BitWidth for "
-                      ++ show bv.exposedPath ++ " in " ++ show ifc
-        ifc = (primitiveInfo $ bv.primitive).interface
+unsafeBVBitWidth bv = fromMaybe failure $ bvBitWidth bv
+  where failure = err $ "could not extract BitWidth for "
+                        ++ show bv.exposedPath ++ " in " ++ show ifc
+        ifc = primInterface bv.primitive
 
 {-# NOINLINE instanceIdCnt #-}
 -- | Global 'InstanceId' counter
@@ -76,12 +80,11 @@ mkPrimitive prim rcvSigs ifc = case getPortOuts ifc of
         iId = unsafePerformIO $ atomicModifyIORef' instanceIdCnt \x -> (x+1, x)
 
 mkUnOpBV :: Primitive -> BV -> BV
-mkUnOpBV prim x = head $ mkPrimitive prim [(Step 0, x)]
+mkUnOpBV prim x = head $ mkPrimitive prim (zip (primInputPaths prim) [x])
                                           (ifcUnaryOp $ unsafeBVBitWidth x)
 
 mkBinOpBV :: Primitive -> BV -> BV -> BV
-mkBinOpBV prim x y = head $ mkPrimitive prim [ (Step 0, x)
-                                             , (Step 1, y) ]
+mkBinOpBV prim x y = head $ mkPrimitive prim (zip (primInputPaths prim) [x, y])
                                              (ifcBinaryOp $ unsafeBVBitWidth x)
 
 mkConstantBV :: Integer -> BitWidth -> BV

@@ -120,7 +120,7 @@ genNetDeclDoc n = return case n.primitive of
   (Interface ifc) -> sep (declIfcPort <$> getPortOuts ifc)
   _ -> mempty
   where nId = n.instanceId
-        nOut = getNetOutput n
+        nOut = netOutput n
         declIfcPort (p, PortOut _ w) = declareIdent (nId, p) Wire NoVal w
         declIfcPort _ = err $ "unsupported interface net: " ++ show n
 
@@ -132,10 +132,10 @@ genNetInstDoc n = return case n.primitive of
   (Interface ifc) -> sep (instIfcPort <$> getPorts ifc)
   _ -> mempty
   where nId = n.instanceId
-        nOut = getNetOutput n
+        nOut = netOutput n
         instPrim = pAssign (pIdent nOut) (pPrim n.primitive n.inputPorts)
         instIfcPort (p, PortIn nm w) =
-          pAssign (text nm) (pNetPort $ getNetInput n)
+          pAssign (text nm) (pNetPort $ netInput n)
         instIfcPort (p, PortOut nm w) = pAssign (pIdent (nId, p)) (text nm)
         instIfcPort _ = err $ "unsupported interface net: " ++ show n
 

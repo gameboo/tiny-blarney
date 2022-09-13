@@ -18,10 +18,13 @@ module TinyBlarney.Core.CircuitInterface (
 , queryCircuitInterfaceLeaves
 , getPorts
 , getPortIns
+, getPortInPaths
 , getPortOuts
+, getPortOutPaths
 , getPortOutWidths
 ) where
 
+import Data.List
 import Data.Foldable
 import qualified Data.Sequence as Seq
 import Text.PrettyPrint hiding ((<>))
@@ -117,11 +120,11 @@ prettyCircuitInterface :: CircuitInterface -> Doc
 prettyCircuitInterface ifc = go NoStep ifc
   where go :: CircuitInterfacePath -> CircuitInterface -> Doc
         go steps (PortIn nm w) =
-                prettyCircuitInterfacePath steps PP.<> char '<'
-          PP.<> text "PortIn" <+> text nm <+> int w PP.<> char '>'
+                prettyCircuitInterfacePath steps
+          PP.<> braces (text "PortIn" <+> text nm <+> int w)
         go steps (PortOut nm w) =
-                prettyCircuitInterfacePath steps PP.<> char '<'
-          PP.<> text "PortOut" <+> text nm <+> int w PP.<> char '>'
+                prettyCircuitInterfacePath steps
+          PP.<> braces (text "PortOut" <+> text nm <+> int w)
         go steps (Product xs) =
           sep [go (steps :|> n) x | (n, x) <- zip [0..] xs]
         go steps (Meta (DocString str) x) = text str <+> nest 2 (go steps x)
@@ -181,11 +184,17 @@ getPortIns ifc =
   where exposePortIn p@(PortIn _ _) = Just p
         exposePortIn _ = Nothing
 
+getPortInPaths :: CircuitInterface -> [CircuitInterfacePath]
+getPortInPaths = sort . fst . unzip . getPortIns
+
 getPortOuts :: CircuitInterface -> [(CircuitInterfacePath, CircuitInterface)]
 getPortOuts ifc =
   [ (x, y) | (x, Just y) <- queryCircuitInterfaceLeaves exposePortOut ifc ]
   where exposePortOut p@(PortOut _ _) = Just p
         exposePortOut _ = Nothing
+
+getPortOutPaths :: CircuitInterface -> [CircuitInterfacePath]
+getPortOutPaths = sort . fst . unzip . getPortOuts
 
 getPortOutWidths :: CircuitInterface -> [(CircuitInterfacePath, BitWidth)]
 getPortOutWidths ifc =
