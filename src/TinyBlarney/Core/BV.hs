@@ -11,8 +11,13 @@ module TinyBlarney.Core.BV (
 , bvBitWidth
 , unsafeBVBitWidth
 , mkConstantBV
+, mkDontCareBV
 , mkAndBV
 , mkOrBV
+, mkXorBV
+, mkInvertBV
+, mkConcatBV
+, mkSelectBV
 , mkCustomBV
 , mkInterfaceBV
 ) where
@@ -66,9 +71,8 @@ instanceIdCnt = unsafePerformIO $ newIORef 0
 
 {-# NOINLINE mkPrimitive #-}
 -- | Helper function for creating an instance of a primitive component
-mkPrimitive :: Primitive -> [PathAndBV] -> CircuitInterface
-            -> [BV]
-mkPrimitive prim rcvSigs ifc = case getPortOuts ifc of
+mkPrimitive :: Primitive -> [PathAndBV] -> [BV]
+mkPrimitive prim rcvSigs = case getPortOuts . primInterface $ prim of
   [] -> [bv]
   ports -> [ bv { exposedPath = path } | (path, _) <- ports ]
   where -- | model BV
@@ -81,14 +85,15 @@ mkPrimitive prim rcvSigs ifc = case getPortOuts ifc of
 
 mkUnOpBV :: Primitive -> BV -> BV
 mkUnOpBV prim x = head $ mkPrimitive prim (zip (primInputPaths prim) [x])
-                                          (ifcUnaryOp $ unsafeBVBitWidth x)
 
 mkBinOpBV :: Primitive -> BV -> BV -> BV
 mkBinOpBV prim x y = head $ mkPrimitive prim (zip (primInputPaths prim) [x, y])
-                                             (ifcBinaryOp $ unsafeBVBitWidth x)
 
 mkConstantBV :: Integer -> BitWidth -> BV
-mkConstantBV v w = head $ mkPrimitive (Constant v w) [] (PortOut "out" w)
+mkConstantBV v w = head $ mkPrimitive (Constant v w) []
+
+mkDontCareBV :: BitWidth -> BV
+mkDontCareBV w = head $ mkPrimitive (DontCare w) []
 
 mkAndBV :: BV -> BV -> BV
 mkAndBV x y = mkBinOpBV (And $ unsafeBVBitWidth x) x y
@@ -96,8 +101,22 @@ mkAndBV x y = mkBinOpBV (And $ unsafeBVBitWidth x) x y
 mkOrBV :: BV -> BV -> BV
 mkOrBV x y = mkBinOpBV (Or $ unsafeBVBitWidth x) x y
 
+mkXorBV :: BV -> BV -> BV
+mkXorBV x y = mkBinOpBV (Xor $ unsafeBVBitWidth x) x y
+
+mkInvertBV :: BV -> BV
+mkInvertBV x = mkUnOpBV (Invert $ unsafeBVBitWidth x) x
+
+mkConcatBV :: BV -> BV -> BV
+mkConcatBV x y = mkBinOpBV (Concatenate wx wy) x y
+  where wx = unsafeBVBitWidth x
+        wy = unsafeBVBitWidth y
+
+mkSelectBV :: (Int, Int) -> BV -> BV
+mkSelectBV (hi, lo) x = mkUnOpBV (Select (hi, lo) $ unsafeBVBitWidth x) x
+
 mkCustomBV :: Primitive -> [PathAndBV] -> [BV]
-mkCustomBV p@Custom{..} rcvSigs = mkPrimitive p rcvSigs interface
+mkCustomBV p@Custom{..} rcvSigs = mkPrimitive p rcvSigs
 
 mkInterfaceBV :: CircuitInterface -> [PathAndBV] -> [BV]
-mkInterfaceBV ifc rcvSigs = mkPrimitive (Interface ifc) rcvSigs ifc
+mkInterfaceBV ifc rcvSigs = mkPrimitive (Interface ifc) rcvSigs

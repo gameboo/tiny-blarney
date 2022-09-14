@@ -3,7 +3,7 @@
 import TinyBlarney
 
 mkAndABOrC :: Bit n -> Bit n -> Bit n -> Bit n
-mkAndABOrC a b c = (a .&. b) .|. c
+mkAndABOrC a b c = (a `bitAnd` b) `bitOr` c
 
 main:: IO ()
 main = do

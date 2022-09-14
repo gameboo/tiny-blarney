@@ -99,9 +99,15 @@ data Primitive =
 
     -- | @Constant k w@: a @w@-sized constant value @k@
     --
-    --   [__inputs__]  no inputs
+    --   [__inputs__]  no input
     --   [__outputs__] the @w@-bit constant value @k@
     Constant Integer BitWidth
+
+    -- | @DontCare w@: a @w@-sized don't care value
+    --
+    --   [__inputs__]  no input
+    --   [__outputs__] the @w@-bit don't care value
+  | DontCare BitWidth
 
     -- | @And w@: a @w@-sized bitwise "and" of 2 operands
     --
@@ -114,6 +120,31 @@ data Primitive =
     --   [__inputs__]  @[x, y]@, 2 @w@-bit operands
     --   [__outputs__] the @w@-bit bitwise "or" of @x@ and @y@
   | Or BitWidth
+
+    -- | @Xor w@: a @w@-sized bitwise "xor" of 2 operands
+    --
+    --   [__inputs__]  @[x, y]@, 2 @w@-bit operands
+    --   [__outputs__] the @w@-bit bitwise "xor" of @x@ and @y@
+  | Xor BitWidth
+
+    -- | @Invert w@: a ones' complement of an operand
+    --
+    --   [__inputs__]  @x@, a @w@-bit operand
+    --   [__outputs__] the one's complement of @x@
+  | Invert BitWidth
+
+    -- | @Concatenate wx wy@: a @wx+wy@-sized concatenation of 2 operands
+    --
+    --   [__inputs__]  @[x, y]@, a @wx@-bit and a @wy@-bit @x@ and @y@ operands
+    --   [__outputs__] the @wx+wy@-bit concatenation of @x@ and @y@
+  | Concatenate BitWidth BitWidth
+
+    -- | @Select (hi, lo) w@: a @(hi-lo+1)@-bit wide slice of a @w@-bit operand
+    --
+    --   [__inputs__]  @x@, a @w@-bit operand
+    --   [__outputs__] the @(hi-lo+1)@-bit wide slice of @x@ between bit indices
+    --                 @hi@ and @lo@ (both included)
+  | Select (Int, Int) BitWidth
 
     -- | A custom component
   | Custom { name :: String -- ^ component's name
@@ -176,17 +207,17 @@ primPretty :: Primitive -> Doc
 primPretty = prettyDoc . primInfo
 
 -- | 'CircuitInterface' for 1-input 1-output circuits a.k.a. unary op.
-ifcUnaryOp :: BitWidth -> CircuitInterface
-ifcUnaryOp w =
-  Product [ metaDocString "Unary operation input"  $ PortIn   "in" w
-          , metaDocString "Unary operation output" $ PortOut "out" w ]
+ifcUnaryOp :: BitWidth -> BitWidth -> CircuitInterface
+ifcUnaryOp wIn wOut =
+  Product [ metaDocString "Unary operation input"  $ PortIn   "in" wIn
+          , metaDocString "Unary operation output" $ PortOut "out" wOut ]
 
 -- | 'CircuitInterface' for 2-inputs 1-output circuits a.k.a. binary op.
-ifcBinaryOp :: BitWidth -> CircuitInterface
-ifcBinaryOp w =
+ifcBinaryOp :: BitWidth -> BitWidth -> BitWidth -> CircuitInterface
+ifcBinaryOp w0 w1 wOut =
   Product [ metaDocString "Binary operation inputs" $
-              PortIn "in0" w <> PortIn "in1" w
-          , metaDocString "Binary operation output" $ PortOut "out" w ]
+              PortIn "in0" w0 <> PortIn "in1" w1
+          , metaDocString "Binary operation output" $ PortOut "out" wOut ]
 
 -- | primitive doc pretty printing helper
 pDoc :: Doc -> CircuitInterface -> Doc
@@ -199,14 +230,35 @@ primInfo (Constant k w) = MkPrimitiveInfo {
   interface = ifc
 , prettyDoc = pDoc (text "Constant " <+> integer k) ifc
 } where ifc = PortOut "out" w
+primInfo (DontCare w) = MkPrimitiveInfo {
+  interface = ifc
+, prettyDoc = pDoc (text "DontCare") ifc
+} where ifc = PortOut "out" w
 primInfo (And w) = MkPrimitiveInfo {
   interface = ifc
 , prettyDoc = pDoc (text "And") ifc
-} where ifc = ifcBinaryOp w
+} where ifc = ifcBinaryOp w w w
 primInfo (Or w) = MkPrimitiveInfo {
   interface = ifc
 , prettyDoc = pDoc (text "Or") ifc
-} where ifc = ifcBinaryOp w
+} where ifc = ifcBinaryOp w w w
+primInfo (Xor w) = MkPrimitiveInfo {
+  interface = ifc
+, prettyDoc = pDoc (text "Xor") ifc
+} where ifc = ifcBinaryOp w w w
+primInfo (Invert w) = MkPrimitiveInfo {
+  interface = ifc
+, prettyDoc = pDoc (text "Invert") ifc
+} where ifc = ifcUnaryOp w w
+primInfo (Concatenate w0 w1) = MkPrimitiveInfo {
+  interface = ifc
+, prettyDoc = pDoc (text "Concatenate") ifc
+} where ifc = ifcBinaryOp w0 w1 (w0+w1)
+primInfo (Select (hi, lo) w) = MkPrimitiveInfo {
+  interface = ifc
+, prettyDoc =
+    pDoc (text "Select" PP.<> parens (int hi PP.<> comma <+> int lo)) ifc
+} where ifc = ifcUnaryOp w (hi-lo+1)
 primInfo p@Custom{..} = MkPrimitiveInfo {
   interface = p.interface
 , prettyDoc =
