@@ -17,7 +17,7 @@ module TinyBlarney.Core.BV (
 , mkXorBV
 , mkInvertBV
 , mkConcatBV
-, mkSelectBV
+, mkSliceBV
 , mkCustomBV
 , mkInterfaceBV
 ) where
@@ -112,8 +112,8 @@ mkConcatBV x y = mkBinOpBV (Concatenate wx wy) x y
   where wx = unsafeBVBitWidth x
         wy = unsafeBVBitWidth y
 
-mkSelectBV :: (Int, Int) -> BV -> BV
-mkSelectBV (hi, lo) x = mkUnOpBV (Select (hi, lo) $ unsafeBVBitWidth x) x
+mkSliceBV :: (Int, Int) -> BV -> BV
+mkSliceBV (hi, lo) x = mkUnOpBV (Slice (hi, lo) $ unsafeBVBitWidth x) x
 
 mkCustomBV :: Primitive -> [PathAndBV] -> [BV]
 mkCustomBV p@Custom{..} rcvSigs = mkPrimitive p rcvSigs

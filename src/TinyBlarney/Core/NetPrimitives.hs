@@ -139,12 +139,12 @@ data Primitive =
     --   [__outputs__] the @wx+wy@-bit concatenation of @x@ and @y@
   | Concatenate BitWidth BitWidth
 
-    -- | @Select (hi, lo) w@: a @(hi-lo+1)@-bit wide slice of a @w@-bit operand
+    -- | @Slice (hi, lo) w@: a @(hi-lo+1)@-bit wide slice of a @w@-bit operand
     --
     --   [__inputs__]  @x@, a @w@-bit operand
     --   [__outputs__] the @(hi-lo+1)@-bit wide slice of @x@ between bit indices
     --                 @hi@ and @lo@ (both included)
-  | Select (Int, Int) BitWidth
+  | Slice (Int, Int) BitWidth
 
     -- | A custom component
   | Custom { name :: String -- ^ component's name
@@ -254,10 +254,10 @@ primInfo (Concatenate w0 w1) = MkPrimitiveInfo {
   interface = ifc
 , prettyDoc = pDoc (text "Concatenate") ifc
 } where ifc = ifcBinaryOp w0 w1 (w0+w1)
-primInfo (Select (hi, lo) w) = MkPrimitiveInfo {
+primInfo (Slice (hi, lo) w) = MkPrimitiveInfo {
   interface = ifc
 , prettyDoc =
-    pDoc (text "Select" PP.<> parens (int hi PP.<> comma <+> int lo)) ifc
+    pDoc (text "Slice" PP.<> parens (int hi PP.<> comma <+> int lo)) ifc
 } where ifc = ifcUnaryOp w (hi-lo+1)
 primInfo p@Custom{..} = MkPrimitiveInfo {
   interface = p.interface

@@ -1,6 +1,5 @@
 {-# LANGUAGE DataKinds           #-}
 {-# LANGUAGE OverloadedRecordDot #-}
-{-# LANGUAGE AllowAmbiguousTypes #-}
 
 {- |
 
@@ -20,6 +19,7 @@ module TinyBlarney.Core.Bit (
 , unsafeWidthOf
 , bitZero
 , bitOne
+, bitDontCare
 , bitAnd
 , bitOr
 , bitXor
@@ -31,9 +31,9 @@ module TinyBlarney.Core.Bit (
 ) where
 
 import TinyBlarney.Core.BV
+import TinyBlarney.Core.Misc
 
 import GHC.TypeLits
-import Data.Proxy
 
 -- | local error helper function
 err :: String -> a
@@ -41,10 +41,6 @@ err m = error $ "TinyBlarney.Core.Bit: " ++ m
 
 -- | Type representing a sized bit vector
 newtype Bit (n :: Nat) = AsBit { bv :: BV }
-
--- | Lower a type of kind 'Nat' to 'Int' value (with type application @\@@)
-valueOf :: forall n. (KnownNat n) => Int
-valueOf = fromInteger (natVal @n Proxy)
 
 -- | Get the size 'n' of a 'Bit n' as an 'Int'
 widthOf :: forall n. KnownNat n => Bit n -> Int
@@ -61,6 +57,10 @@ bitZero = AsBit $ mkConstantBV 0 1
 -- | A single bit 1
 bitOne :: Bit 1
 bitOne = AsBit $ mkConstantBV 1 1
+
+-- |A single bit don't care
+bitDontCare :: Bit 1
+bitDontCare = AsBit $ mkDontCareBV 1
 
 -- | @bitAnd x y@ returns the bitwise "and" of @x@ and @y@
 bitAnd :: Bit n -> Bit n -> Bit n
@@ -86,7 +86,7 @@ bitConcat x y = AsBit $ mkConcatBV x.bv y.bv
 --   of @x@ between bit indices @hi@ and @lo@ (both included)
 unsafeBitSlice :: forall n m. (Int, Int) -> Bit n -> Bit m
 unsafeBitSlice (hi, lo) x
-  | hi >= lo && wOut <= wIn = AsBit $ mkSelectBV (hi, lo) x.bv
+  | hi >= lo && wOut <= wIn = AsBit $ mkSliceBV (hi, lo) x.bv
   | otherwise = err $ "unsafeBitSlice: unmet constraints, "
                       ++ "hi: " ++ show hi
                       ++ "lo: " ++ show lo

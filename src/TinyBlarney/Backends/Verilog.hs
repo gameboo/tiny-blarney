@@ -124,14 +124,19 @@ genNetDocs n = do newDecl <- genNetDeclDoc n
 -- | Code generation for Verilog declarations
 genNetDeclDoc :: Net -> GenNetDocs Doc
 genNetDeclDoc n = return case n.primitive of
-  (Constant k w) -> declareIdent nOut Wire (IntVal k) w
-  (And w) -> declareIdent nOut Wire NoVal w
-  (Or w) -> declareIdent nOut Wire NoVal w
+  (Constant k w) -> declareIdent nOut Wire (IntInitVal k) w
+  (DontCare w) -> declareIdent nOut Wire DontCareInitVal w
+  (And w) -> declareIdent nOut Wire NoInitVal w
+  (Or w) -> declareIdent nOut Wire NoInitVal w
+  (Xor w) -> declareIdent nOut Wire NoInitVal w
+  (Invert w) -> declareIdent nOut Wire NoInitVal w
+  (Concatenate w0 w1) -> declareIdent nOut Wire NoInitVal (w0 + w1)
+  (Slice _ w) -> declareIdent nOut Wire NoInitVal w
   (Interface ifc) -> sep (declIfcPort <$> getPortOuts ifc)
   _ -> mempty
   where nId = n.instanceId
         nOut = netOutput n
-        declIfcPort (p, PortOut _ w) = declareIdent (nId, p) Wire NoVal w
+        declIfcPort (p, PortOut _ w) = declareIdent (nId, p) Wire NoInitVal w
         declIfcPort _ = err $ "unsupported interface net: " ++ show n
 
 -- | Code generation for Verilog instantiations
@@ -139,6 +144,10 @@ genNetInstDoc :: Net -> GenNetDocs Doc
 genNetInstDoc n = return case n.primitive of
   (And _) -> instPrim
   (Or _) -> instPrim
+  (Xor _) -> instPrim
+  (Invert _) -> instPrim
+  (Concatenate _ _) -> instPrim
+  (Slice _ _) -> instPrim
   (Interface ifc) -> sep (instIfcPort <$> getPorts ifc)
   _ -> mempty
   where nId = n.instanceId
@@ -172,8 +181,14 @@ pAssign lhs rhs = (text "assign" <+> lhs <+> equals <+> rhs) <> semi
 
 pPrim :: Primitive -> [NetPort] -> Doc
 pPrim (Constant k w) [] = pIntLit k w
+pPrim (DontCare w) [] = pDontCare w
 pPrim (And _) [x, y] = pNetPort x <+> char '&' <+> pNetPort y
 pPrim (Or _) [x, y] = pNetPort x <+> char '|' <+> pNetPort y
+pPrim (Xor _) [x, y] = pNetPort x <+> char '^' <+> pNetPort y
+pPrim (Invert _) [x] = char '~' <> parens (pNetPort x)
+pPrim (Concatenate _ _) [x, y] = braces $ (pNetPort x <> comma) <+> pNetPort y
+pPrim (Slice (hi, lo) _) [x] =
+  parens (pNetPort x) <> brackets ((int hi <> colon) <+> int lo)
 pPrim p _ = err $ "unsupported Prim '" ++ show p ++ "' encountered"
 
 pNetPort :: NetPort -> Doc
@@ -181,7 +196,7 @@ pNetPort (NetPort netOut) = pIdent netOut
 pNetPort (NetPortInlined p ins) = parens $ pPrim p ins
 
 data WireOrReg = Wire | Reg
-data InitVal = NoVal | IntVal Integer | DontCareVal
+data InitVal = NoInitVal | IntInitVal Integer | DontCareInitVal
 declareIdent :: NetOutput -> WireOrReg -> InitVal -> BitWidth -> Doc
 declareIdent netOut wireOrReg initVal w =
   (wireOrRegDoc <+> widthDoc <+> pIdent netOut <+> initDoc) <> semi
@@ -190,6 +205,6 @@ declareIdent netOut wireOrReg initVal w =
                                    Reg  -> text "reg"
   widthDoc = if w > 1 then brackets (int (w-1) <> text ":0") else empty
   initDoc = case initVal of
-    NoVal -> empty
-    IntVal x -> equals <+> pIntLit x w
-    DontCareVal -> equals <+> pDontCare w
+    NoInitVal -> empty
+    IntInitVal x -> equals <+> pIntLit x w
+    DontCareInitVal -> equals <+> pDontCare w
