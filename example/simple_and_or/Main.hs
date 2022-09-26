@@ -14,5 +14,5 @@ main = do
   putStrLn "generate verilog"
   putStrLn "----"
   putStrLn v
-  where c = buildCircuit $ mkAndABOrC @8
-        v = writeVerilogModule "myMkAndABOrC" c
+  where c = buildCircuit "myMkAndABOrC" $ mkAndABOrC @8
+        v = writeVerilogModule c

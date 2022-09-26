@@ -1,16 +1,20 @@
-{-# LANGUAGE ViewPatterns    #-}
-{-# LANGUAGE PatternSynonyms #-}
+{-# LANGUAGE ViewPatterns        #-}
+{-# LANGUAGE PatternSynonyms     #-}
+{-# LANGUAGE OverloadedRecordDot #-}
 
 module TinyBlarney.Core.CircuitInterface (
-  IfcName
-, BitWidth
+  BitWidth
+, PortDir (..)
 , CircuitInterface (..)
+, MetaInfo (..)
 , CircuitInterfacePath ((:<|), (:|>), NoStep, Step)
 , CircuitInterfaceQuery
 , metaNameHint
 , metaDocString
 , prettyCircuitInterface
 , prettyCircuitInterfacePath
+, CircuitLeafCtxt (..)
+, onCircuitInterfaceLeaves
 , isCircuitInterfaceLeaf
 , flipCircuitInterface
 , getPortOutBitWidth
@@ -30,13 +34,19 @@ import qualified Data.Sequence as Seq
 import Text.PrettyPrint hiding ((<>))
 import qualified Text.PrettyPrint as PP ((<>))
 
-type IfcName = String
+-- | local error helper function
+err :: String -> a
+err m = error $ "TinyBlarney.Core.CircuitInterface: " ++ m
+
 type BitWidth = Int
+data PortDir = In | Out deriving Show
 
 data CircuitInterface =
+  -- ** non-leaf constructors
+    Product [CircuitInterface]
+  | Meta MetaInfo CircuitInterface
   -- ** leaf 'CircuitInterface' constructors
-    PortIn IfcName BitWidth
-  | PortOut IfcName BitWidth
+  | Port PortDir BitWidth
 --  | StaticParamInt IfcName Integer
 --  | StaticParamString IfcName String
 --  | PortInOut IfcName BitWidth
@@ -44,9 +54,6 @@ data CircuitInterface =
 --  | ClockOut IfcName
 --  | ResetIn IfcName
 --  | ResetOut IfcName
-  -- ** non-leaf constructors
-  | Product [CircuitInterface]
-  | Meta MetaInfo CircuitInterface
 
 data MetaInfo =
     NameHint String
@@ -119,19 +126,33 @@ instance Show CircuitInterfacePath where
 prettyCircuitInterface :: CircuitInterface -> Doc
 prettyCircuitInterface ifc = go NoStep ifc
   where go :: CircuitInterfacePath -> CircuitInterface -> Doc
-        go steps (PortIn nm w) =
-                prettyCircuitInterfacePath steps
-          PP.<> braces (text "PortIn" <+> text nm <+> int w)
-        go steps (PortOut nm w) =
-                prettyCircuitInterfacePath steps
-          PP.<> braces (text "PortOut" <+> text nm <+> int w)
+        go steps (Meta (DocString str) x) =
+          text "DocString:" <+> text str <+> char '-' <+> nest 2 (go steps x)
+        go steps (Meta (NameHint nm) x) =
+          text "NameHint:" <+> text nm <+> char '-' <+> nest 2 (go steps x)
         go steps (Product xs) =
           sep [go (steps :|> n) x | (n, x) <- zip [0..] xs]
-        go steps (Meta (DocString str) x) = text str <+> nest 2 (go steps x)
-        go steps (Meta _ x) = text "Meta" <+> nest 2 (go steps x)
+        go steps (Port pDir w) =
+                prettyCircuitInterfacePath steps
+          PP.<> braces (text "Port" <+> text (show pDir) <+> int w)
 
 instance Show CircuitInterface where
   show = render . prettyCircuitInterface
+
+data CircuitLeafCtxt = MkCircuitLeafCtxt { path :: CircuitInterfacePath
+                                         , nameHints :: [String]
+                                         , ifc :: CircuitInterface }
+onCircuitInterfaceLeaves :: (CircuitLeafCtxt -> a) -> CircuitInterface -> [a]
+onCircuitInterfaceLeaves f ifc = go dfltCtxt ifc
+  where dfltCtxt = MkCircuitLeafCtxt { path = NoStep
+                                     , nameHints = []
+                                     , ifc = err "Not a leaf" }
+        go ctxt (Meta (NameHint nm) x) =
+          go ctxt{nameHints = nm : ctxt.nameHints} x
+        go ctxt (Meta _ x) = go ctxt x
+        go ctxt (Product xs) =
+          concat [go ctxt{path = ctxt.path :|> n} x | (n, x) <- zip [0..] xs]
+        go ctxt p@(Port _ _) = [f ctxt{ifc = p}]
 
 type CircuitInterfaceQuery a = CircuitInterface -> Maybe a
 
@@ -140,25 +161,27 @@ isCircuitInterfaceLeaf (Meta _ _) = False
 isCircuitInterfaceLeaf (Product _) = False
 isCircuitInterfaceLeaf _ = True
 
+flipPortDir :: PortDir -> PortDir
+flipPortDir In = Out
+flipPortDir Out = In
+
 flipCircuitInterface :: CircuitInterface -> CircuitInterface
-flipCircuitInterface (PortIn nm w) = PortOut nm w
-flipCircuitInterface (PortOut nm w) = PortIn nm w
 flipCircuitInterface (Meta m x) = Meta m $ flipCircuitInterface x
 flipCircuitInterface (Product xs) = Product $ flipCircuitInterface <$> xs
---flipCircuitInterface x = x
+flipCircuitInterface (Port pDir w) = Port (flipPortDir pDir) w
 
 getPortOutBitWidth :: CircuitInterfaceQuery BitWidth
-getPortOutBitWidth (PortOut _ w) = Just w
+getPortOutBitWidth (Port Out w) = Just w
 getPortOutBitWidth _ = Nothing
 
 queryCircuitInterfaceAt :: CircuitInterfaceQuery a
                         -> CircuitInterface
                         -> CircuitInterfacePath
                         -> Maybe a
-queryCircuitInterfaceAt query (Product xs) (n :<| steps) | n < length xs =
-  queryCircuitInterfaceAt query (xs !! n) steps
 queryCircuitInterfaceAt query (Meta _ x) steps =
   queryCircuitInterfaceAt query x steps
+queryCircuitInterfaceAt query (Product xs) (n :<| steps) | n < length xs =
+  queryCircuitInterfaceAt query (xs !! n) steps
 queryCircuitInterfaceAt query x NoStep = query x
 queryCircuitInterfaceAt _ _ _ = Nothing
 
@@ -174,14 +197,13 @@ queryCircuitInterfaceLeaves query ifc = go NoStep query ifc
 getPorts :: CircuitInterface -> [(CircuitInterfacePath, CircuitInterface)]
 getPorts ifc =
   [ (x, y) | (x, Just y) <- queryCircuitInterfaceLeaves exposePort ifc]
-  where exposePort p@(PortIn _ _) = Just p
-        exposePort p@(PortOut _ _) = Just p
+  where exposePort p@(Port _ _) = Just p
         exposePort _ = Nothing
 
 getPortIns :: CircuitInterface -> [(CircuitInterfacePath, CircuitInterface)]
 getPortIns ifc =
   [ (x, y) | (x, Just y) <- queryCircuitInterfaceLeaves exposePortIn ifc]
-  where exposePortIn p@(PortIn _ _) = Just p
+  where exposePortIn p@(Port In _) = Just p
         exposePortIn _ = Nothing
 
 getPortInPaths :: CircuitInterface -> [CircuitInterfacePath]
@@ -190,7 +212,7 @@ getPortInPaths = sort . fst . unzip . getPortIns
 getPortOuts :: CircuitInterface -> [(CircuitInterfacePath, CircuitInterface)]
 getPortOuts ifc =
   [ (x, y) | (x, Just y) <- queryCircuitInterfaceLeaves exposePortOut ifc ]
-  where exposePortOut p@(PortOut _ _) = Just p
+  where exposePortOut p@(Port Out _) = Just p
         exposePortOut _ = Nothing
 
 getPortOutPaths :: CircuitInterface -> [CircuitInterfacePath]
@@ -199,5 +221,5 @@ getPortOutPaths = sort . fst . unzip . getPortOuts
 getPortOutWidths :: CircuitInterface -> [(CircuitInterfacePath, BitWidth)]
 getPortOutWidths ifc =
   [ (x, y) | (x, Just y) <- queryCircuitInterfaceLeaves exposePortOutW ifc ]
-  where exposePortOutW (PortOut _ w) = Just w
+  where exposePortOutW (Port Out w) = Just w
         exposePortOutW _ = Nothing

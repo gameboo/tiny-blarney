@@ -18,6 +18,7 @@ module TinyBlarney.Backends.Verilog (
 
 import TinyBlarney.Core
 
+import Data.List
 import Data.Array
 import Data.Maybe
 import Data.Foldable
@@ -36,8 +37,8 @@ err m = error $ "TinyBlarney.Backends.Verilog: " ++ m
 -- exported API
 --------------------------------------------------------------------------------
 -- | Generate Verilog code for a 'Circuit'
-writeVerilogModule :: String -> Circuit -> String
-writeVerilogModule nm c = render $ prettyVerilogModule nm c
+writeVerilogModule :: Circuit -> String
+writeVerilogModule c = render $ prettyVerilogModule c
 
 -- Internal helpers
 --------------------------------------------------------------------------------
@@ -48,12 +49,29 @@ spaces n = hcat $ replicate n space
 hexInt n = text (showHex n "")
 argStyle = sep . punctuate comma
 
+-- derive name for interface port
+ifcName :: String -> [String] -> String
+ifcName dflt [] = dflt
+ifcName _ xs = intercalate "_" (reverse xs)
+
+ifcPort :: CircuitLeafCtxt -> (String, PortDir, BitWidth)
+ifcPort MkCircuitLeafCtxt{..} = case ifc of
+  Port In w -> (ifcName ("arg" ++ show idx) nameHints, In, w)
+  Port Out w -> (ifcName ("retVal" ++ show idx) nameHints, Out, w)
+  where idx = case path of _ :|> n -> show n
+                           _ -> ""
+
+ifcPorts :: CircuitInterface -> [(String, PortDir, BitWidth)]
+ifcPorts = onCircuitInterfaceLeaves ifcPort
+
 -- | code generation for a Verilog module
-prettyVerilogModule :: String -> Circuit -> Doc
-prettyVerilogModule nm Circuit{..} =
+prettyVerilogModule :: Circuit -> Doc
+prettyVerilogModule circuit =
   header $+$ nest 2 (vcat [declBlk, instBlk, alwsBlk]) $+$ footer
   where
-  header = text "module" <+> text nm <+> parens (modArgs interface) PP.<> semi
+  header = text "module" <+> text circuit.name
+                         <+> parens (argStyle (modPort <$> ports))
+                         PP.<> semi
   declBlk = declDocs
   instBlk = instDocs
   alwsBlk = if isEmpty alwsDocs then empty else
@@ -64,14 +82,13 @@ prettyVerilogModule nm Circuit{..} =
     $+$ text "end else begin" $+$ nest 2 blk $+$ text "end"
   footer = text "endmodule"
   -- CircuitInterface as a module argument list
-  modArgs (PortIn nm w) =
-    text "input wire" <+> brackets (int (w-1) PP.<> text ":0") <+> text nm
-  modArgs (PortOut nm w) =
-    text "output wire" <+> brackets (int (w-1) PP.<> text ":0") <+> text nm
-  modArgs (Product xs) = argStyle (modArgs <$> xs)
-  modArgs _ = empty
+  ports = ifcPorts . externalCircuitInterface $ circuit
+  modPort (nm, pDir, w) = let tDir = case pDir of In -> "input"
+                                                  Out -> "output"
+    in text tDir <+> text "wire" <+> brackets (int (w-1) PP.<> text ":0")
+                 <+> text nm
   -- generate the appropriate 'Doc's for the netlist
-  netDocs = genAllNetDocs netlist
+  netDocs = genAllNetDocs circuit.netlist
   declDocs = sep $ toList netDocs.decl
   instDocs = sep $ toList netDocs.inst
   alwsDocs = sep $ toList netDocs.alws
@@ -136,7 +153,7 @@ genNetDeclDoc n = return case n.primitive of
   _ -> mempty
   where nId = n.instanceId
         nOut = netOutput n
-        declIfcPort (p, PortOut _ w) = declareIdent (nId, p) Wire NoInitVal w
+        declIfcPort (p, Port Out w) = declareIdent (nId, p) Wire NoInitVal w
         declIfcPort _ = err $ "unsupported interface net: " ++ show n
 
 -- | Code generation for Verilog instantiations
@@ -153,9 +170,9 @@ genNetInstDoc n = return case n.primitive of
   where nId = n.instanceId
         nOut = netOutput n
         instPrim = pAssign (pIdent nOut) (pPrim n.primitive n.inputPorts)
-        instIfcPort (p, PortIn nm w) =
-          pAssign (text nm) (pNetPort $ netInput n)
-        instIfcPort (p, PortOut nm w) = pAssign (pIdent (nId, p)) (text nm)
+        instIfcPort (p, Port In w) =
+          pAssign (text "TODO") (pNetPort $ netInput n)
+        instIfcPort (p, Port Out w) = pAssign (pIdent (nId, p)) (text "TODO")
         instIfcPort _ = err $ "unsupported interface net: " ++ show n
 
 -- | Code generation for Verilog always block statements
@@ -188,7 +205,7 @@ pPrim (Xor _) [x, y] = pNetPort x <+> char '^' <+> pNetPort y
 pPrim (Invert _) [x] = char '~' <> parens (pNetPort x)
 pPrim (Concatenate _ _) [x, y] = braces $ (pNetPort x <> comma) <+> pNetPort y
 pPrim (Slice (hi, lo) _) [x] =
-  parens (pNetPort x) <> brackets ((int hi <> colon) <+> int lo)
+  parens (pNetPort x) <> brackets (int hi <> colon <> int lo)
 pPrim p _ = err $ "unsupported Prim '" ++ show p ++ "' encountered"
 
 pNetPort :: NetPort -> Doc

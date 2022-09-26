@@ -15,11 +15,18 @@ type.
 module TinyBlarney.Core.Bit (
   Bit (..)
 , valueOf
-, widthOf
 , unsafeWidthOf
+, unsafeBitConstant
+, bitConstant
 , bitZero
+, unsafeBitZeros
+, bitZeros
 , bitOne
+, unsafeBitOnes
+, bitOnes
 , bitDontCare
+, unsafeBitDontCares
+, bitDontCares
 , bitAnd
 , bitOr
 , bitXor
@@ -42,25 +49,53 @@ err m = error $ "TinyBlarney.Core.Bit: " ++ m
 -- | Type representing a sized bit vector
 newtype Bit (n :: Nat) = AsBit { bv :: BV }
 
--- | Get the size 'n' of a 'Bit n' as an 'Int'
-widthOf :: forall n. KnownNat n => Bit n -> Int
-widthOf _ = valueOf @n
---
 -- | Get the size of a 'Bit n' without relying on its type
 unsafeWidthOf :: Bit n -> Int
 unsafeWidthOf = unsafeBVBitWidth . bv
 
+-- | Constant of an explicitly user-provided width
+unsafeBitConstant :: Integer -> Int -> Bit n
+unsafeBitConstant k w = AsBit $ mkConstantBV k w
+
+-- | Constant of a given value
+bitConstant :: forall n. KnownNat n => Integer -> Bit n
+bitConstant k = unsafeBitConstant k (valueOf @n)
+
 -- | A single bit 0
 bitZero :: Bit 1
-bitZero = AsBit $ mkConstantBV 0 1
+bitZero = bitConstant 0
+
+-- | All bits zero with explicitly user-provided width
+unsafeBitZeros :: Int -> Bit n
+unsafeBitZeros w = unsafeFromBitList $ replicate w bitZero
+
+-- | All bits zero
+bitZeros :: forall n. KnownNat n => Bit n
+bitZeros = unsafeBitZeros (valueOf @n)
 
 -- | A single bit 1
 bitOne :: Bit 1
-bitOne = AsBit $ mkConstantBV 1 1
+bitOne = bitConstant 1
+
+-- | All bits one with explicitly user-provided width
+unsafeBitOnes :: Int -> Bit n
+unsafeBitOnes w = unsafeFromBitList $ replicate w bitOne
+
+-- | All bits one
+bitOnes :: forall n. KnownNat n => Bit n
+bitOnes = unsafeBitOnes (valueOf @n)
 
 -- |A single bit don't care
 bitDontCare :: Bit 1
 bitDontCare = AsBit $ mkDontCareBV 1
+
+-- | All bits don't care with explicitly user-provided width
+unsafeBitDontCares :: Int -> Bit n
+unsafeBitDontCares w = unsafeFromBitList $ replicate w bitDontCare
+
+-- | All bits don't care
+bitDontCares :: forall n. KnownNat n => Bit n
+bitDontCares = unsafeBitDontCares (valueOf @n)
 
 -- | @bitAnd x y@ returns the bitwise "and" of @x@ and @y@
 bitAnd :: Bit n -> Bit n -> Bit n

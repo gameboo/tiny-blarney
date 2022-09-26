@@ -84,11 +84,11 @@ instance Show Net where
 -- | A 'NetlistArray' type synonym for 'Array InstanceId Net'.
 type NetlistArray = Array InstanceId Net
 -- | A 'Netlist', represented as an 'Array InstanceId Net'.
-newtype Netlist = Netlist NetlistArray
+newtype Netlist = Netlist { netlistArray :: NetlistArray }
 
 -- | Pretty print a 'Netlist'.
 prettyNetlist :: Netlist -> Doc
-prettyNetlist (Netlist nl) = vcat (prettyNet <$> elems nl)
+prettyNetlist nl = vcat (prettyNet <$> elems nl.netlistArray)
 
 -- | Show instance for 'Netlist'.
 instance Show Netlist where
@@ -209,15 +209,18 @@ primPretty = prettyDoc . primInfo
 -- | 'CircuitInterface' for 1-input 1-output circuits a.k.a. unary op.
 ifcUnaryOp :: BitWidth -> BitWidth -> CircuitInterface
 ifcUnaryOp wIn wOut =
-  Product [ metaDocString "Unary operation input"  $ PortIn   "in" wIn
-          , metaDocString "Unary operation output" $ PortOut "out" wOut ]
+  Product [ metaDocString "Unary operation input" . metaNameHint "in" $
+              Port In wIn
+          , metaDocString "Unary operation output" . metaNameHint "out" $
+              Port Out wOut ]
 
 -- | 'CircuitInterface' for 2-inputs 1-output circuits a.k.a. binary op.
 ifcBinaryOp :: BitWidth -> BitWidth -> BitWidth -> CircuitInterface
 ifcBinaryOp w0 w1 wOut =
   Product [ metaDocString "Binary operation inputs" $
-              PortIn "in0" w0 <> PortIn "in1" w1
-          , metaDocString "Binary operation output" $ PortOut "out" wOut ]
+              metaNameHint "in0" (Port In w0) <> metaNameHint "in1" (Port In w1)
+          , metaDocString "Binary operation output" $
+              metaNameHint "out" (Port Out wOut) ]
 
 -- | primitive doc pretty printing helper
 pDoc :: Doc -> CircuitInterface -> Doc
@@ -229,11 +232,11 @@ primInfo :: Primitive -> PrimitiveInfo
 primInfo (Constant k w) = MkPrimitiveInfo {
   interface = ifc
 , prettyDoc = pDoc (text "Constant " <+> integer k) ifc
-} where ifc = PortOut "out" w
+} where ifc = metaNameHint "out" $ Port Out w
 primInfo (DontCare w) = MkPrimitiveInfo {
   interface = ifc
 , prettyDoc = pDoc (text "DontCare") ifc
-} where ifc = PortOut "out" w
+} where ifc = metaNameHint "out" $ Port Out w
 primInfo (And w) = MkPrimitiveInfo {
   interface = ifc
 , prettyDoc = pDoc (text "And") ifc
