@@ -1,6 +1,7 @@
 {-# LANGUAGE DataKinds            #-}
 {-# LANGUAGE TypeFamilies         #-}
 {-# LANGUAGE DefaultSignatures    #-}
+{-# LANGUAGE OverloadedRecordDot  #-}
 {-# LANGUAGE AllowAmbiguousTypes  #-}
 {-# LANGUAGE UndecidableInstances #-}
 
@@ -18,6 +19,7 @@ module TinyBlarney.Core.Bits (
 , internalInterface
 ) where
 
+import TinyBlarney.Core.BV
 import TinyBlarney.Core.Bit
 import TinyBlarney.Core.Misc
 import TinyBlarney.Core.CircuitInterface
@@ -70,6 +72,11 @@ class Bits a where
     metaNameHint name . getExternalInterface' 0 . from
   getExternalInterface Nothing = getExternalInterface' 0 . from
 
+  -- | Retrieve 'BV's
+  getBVs :: a -> [BV]
+  default getBVs :: GBits a => a -> [BV]
+  getBVs = getBVs' . from
+
 class Bits' f where
   type SizeOf' f :: Nat
   sizeOf' :: f p -> Int
@@ -77,6 +84,7 @@ class Bits' f where
   unpack' :: Bit (SizeOf' f) -> f p
   -- the Int argument is the field's index in the current level of :*: chain
   getExternalInterface' :: Int -> f p -> CircuitInterface
+  getBVs' :: f p -> [BV]
 
 instance Bits' U1 where
   type SizeOf' U1 = 0
@@ -84,6 +92,7 @@ instance Bits' U1 where
   pack' _ = bitZeros
   unpack' _ = U1
   getExternalInterface' _ _ = mempty
+  getBVs' _ = []
 
 -- No instance for Bits' (f :+: g)
 
@@ -99,6 +108,7 @@ instance (Bits' f, Bits' g) => Bits' (f :*: g) where
   getExternalInterface' n ~(x :*: y) =
        metaNameHint ("tpl" ++ show n) (getExternalInterface' n x)
     <> metaNameHint ("tpl" ++ show (n+1)) (getExternalInterface' (n+1) y)
+  getBVs' ~(x :*: y) = getBVs' x ++ getBVs' y
 
 instance (Bits c) => Bits' (K1 i c) where
   type SizeOf' (K1 i c) = SizeOf c
@@ -106,6 +116,7 @@ instance (Bits c) => Bits' (K1 i c) where
   pack' ~(K1 x) = pack x
   unpack' = K1 . unpack
   getExternalInterface' _ ~(K1 x) = getExternalInterface Nothing x
+  getBVs' ~(K1 x) = getBVs x
 
 instance (Bits' f, Selector t) => Bits' (M1 S t f) where
   type SizeOf' (M1 S t f) = SizeOf' f
@@ -115,6 +126,7 @@ instance (Bits' f, Selector t) => Bits' (M1 S t f) where
   getExternalInterface' n m@(~(M1 x))
     | null $ selName m = getExternalInterface' n x
     | otherwise = metaNameHint (selName m) (getExternalInterface' n x)
+  getBVs' ~(M1 x) = getBVs' x
 
 instance {-# OVERLAPPABLE #-} (Bits' f) => Bits' (M1 i t f) where
   type SizeOf' (M1 i t f) = SizeOf' f
@@ -122,6 +134,7 @@ instance {-# OVERLAPPABLE #-} (Bits' f) => Bits' (M1 i t f) where
   pack' ~(M1 x) = pack' x
   unpack' = M1 . unpack'
   getExternalInterface' n ~(M1 x) = getExternalInterface' n x
+  getBVs' ~(M1 x) = getBVs' x
 
 -- Standard Bits instances
 
@@ -132,6 +145,7 @@ instance KnownNat n => Bits (Bit n) where
   unpack = id
   getExternalInterface (Just name) _ = metaNameHint name $ Port Out (valueOf @n)
   getExternalInterface Nothing _ = Port Out $ valueOf @n
+  getBVs x = [x.bv]
 
 instance Bits ()
 instance (Bits a, Bits b) => Bits (a, b)
