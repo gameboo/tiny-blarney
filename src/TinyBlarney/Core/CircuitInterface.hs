@@ -3,12 +3,14 @@
 {-# LANGUAGE OverloadedRecordDot #-}
 
 module TinyBlarney.Core.CircuitInterface (
-  BitWidth
+  InstanceId
+, BitWidth
 , PortDir (..)
 , CircuitInterface (..)
 , MetaInfo (..)
 , CircuitInterfacePath ((:<|), (:|>), NoStep, Step)
 , CircuitInterfaceQuery
+, metaInstanceId
 , metaNameHint
 , metaDocString
 , prettyCircuitInterface
@@ -38,9 +40,13 @@ import qualified Text.PrettyPrint as PP ((<>))
 err :: String -> a
 err m = error $ "TinyBlarney.Core.CircuitInterface: " ++ m
 
+-- | A type to represent a unique identifier. 'InstanceId' is defined as 'Int'.
+type InstanceId = Int
+-- | A type to represent a width in bits. 'BitWidth' is defined as 'Int'.
 type BitWidth = Int
+-- | A type to represent the direction of an interface port ('In' or 'Out').
 data PortDir = In | Out deriving Show
-
+-- A type to represent the interface of a circuit
 data CircuitInterface =
   -- ** non-leaf constructors
     Product [CircuitInterface]
@@ -56,10 +62,13 @@ data CircuitInterface =
 --  | ResetOut IfcName
 
 data MetaInfo =
-    NameHint String
+    InstanceId InstanceId
+  | NameHint String
   | DocString String
   deriving Show
 
+metaInstanceId :: InstanceId -> CircuitInterface -> CircuitInterface
+metaInstanceId i ifc = Meta (InstanceId i) ifc
 metaNameHint :: String -> CircuitInterface -> CircuitInterface
 metaNameHint nm ifc = Meta (NameHint nm) ifc
 metaDocString :: String -> CircuitInterface -> CircuitInterface
@@ -133,6 +142,8 @@ prettyCircuitInterface ifc = go NoStep ifc
           text "DocString:" <+> text str <+> char '-' <+> nest 2 (go steps x)
         go steps (Meta (NameHint nm) x) =
           text "NameHint:" <+> text nm <+> char '-' <+> nest 2 (go steps x)
+        go steps (Meta (InstanceId i) x) =
+          text "InstanceId:" <+> int i <+> char '-' <+> nest 2 (go NoStep x)
         go steps (Product xs) =
           sep [go (steps :|> n) x | (n, x) <- zip [0..] xs]
         go steps (Port pDir w) =
@@ -142,16 +153,21 @@ prettyCircuitInterface ifc = go NoStep ifc
 instance Show CircuitInterface where
   show = render . prettyCircuitInterface
 
-data CircuitLeafCtxt = MkCircuitLeafCtxt { path :: CircuitInterfacePath
-                                         , nameHints :: [String]
-                                         , ifc :: CircuitInterface }
+data CircuitLeafCtxt = MkCircuitLeafCtxt {
+   mInstanceId :: Maybe InstanceId
+ , path :: CircuitInterfacePath
+ , nameHints :: [String]
+ , ifc :: CircuitInterface } deriving Show
 onCircuitInterfaceLeaves :: (CircuitLeafCtxt -> a) -> CircuitInterface -> [a]
 onCircuitInterfaceLeaves f ifc = go dfltCtxt ifc
-  where dfltCtxt = MkCircuitLeafCtxt { path = NoStep
+  where dfltCtxt = MkCircuitLeafCtxt { mInstanceId = Nothing
+                                     , path = NoStep
                                      , nameHints = []
                                      , ifc = err "Not a leaf" }
         go ctxt (Meta (NameHint nm) x) =
           go ctxt{nameHints = nm : ctxt.nameHints} x
+        go ctxt (Meta (InstanceId i) x) =
+          go ctxt{mInstanceId = Just i, path = NoStep} x
         go ctxt (Meta _ x) = go ctxt x
         go ctxt (Product xs) =
           concat [go ctxt{path = ctxt.path :|> n} x | (n, x) <- zip [0..] xs]

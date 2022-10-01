@@ -34,10 +34,6 @@ err m = error $ "TinyBlarney.Core.NetPrimitives: " ++ m
 
 --------------------------------------------------------------------------------
 
--- | A type to represent a unique identifier for 'BV's and 'Net's.
---   'InstanceId' is defined as 'Int'
-type InstanceId = Int
-
 -- | A type to identify a 'Net' output. 'NetOutput' is a
 --   '(InstanceId, CircuitInterfacePath)' pair.
 type NetOutput = (InstanceId, CircuitInterfacePath)
