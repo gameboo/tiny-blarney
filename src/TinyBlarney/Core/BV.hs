@@ -7,6 +7,7 @@
 
 module TinyBlarney.Core.BV (
   BV (..)
+, prettyBV
 , PathAndBV
 , bvBitWidth
 , unsafeBVBitWidth
@@ -26,6 +27,8 @@ import TinyBlarney.Core.NetPrimitives
 import TinyBlarney.Core.CircuitInterface
 
 import Data.Maybe
+import Prelude hiding ((<>))
+import Text.PrettyPrint
 
 -- For Observable Sharing
 import Data.IORef
@@ -50,7 +53,23 @@ data BV = MkBV { instanceId :: InstanceId
                , primitive :: Primitive
                , receivedSignals :: [PathAndBV]
                , exposedPath :: CircuitInterfacePath }
-        deriving Show
+
+-- | Pretty print a 'BV'.
+prettyBV :: BV -> Doc
+prettyBV MkBV{..} =
+  text "bv" <> int instanceId <> prettyCircuitInterfacePath exposedPath
+            <+> sep xs
+  where
+    xs = [ primPretty primitive
+         , case receivedSignals of
+             [] -> text "No Inputs"
+             _ -> text "Inputs" <+> braces (nest 2 $ commaSep rcvPathsDocs) ]
+    rcvPathsDocs = prettyCircuitInterfacePath . fst <$> receivedSignals
+    commaSep = sep . punctuate comma
+
+-- | Show instance for 'BV'.
+instance Show BV where
+  show = render . prettyBV
 
 type PathAndBV = (CircuitInterfacePath, BV)
 
