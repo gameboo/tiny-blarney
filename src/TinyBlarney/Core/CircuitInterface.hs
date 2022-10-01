@@ -111,6 +111,9 @@ instance Eq CircuitInterfacePath where
 
 -- | 'CircuitInterfacePath's are ordered
 instance Ord CircuitInterfacePath where
+  compare NoStep NoStep = EQ
+  compare NoStep p = LT
+  compare p NoStep = GT
   compare (n0 :<| s0) (n1 :<| s1) | n0 == n1 = compare s0 s1
                                   | otherwise = compare n0 n1
   compare p0 p1 = error $    "cannot compare " ++ show p0 ++ " and " ++ show p1
