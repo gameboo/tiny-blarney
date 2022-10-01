@@ -97,8 +97,8 @@ instance (Bits' f, Bits' g) => Bits' (f :*: g) where
           wx = sizeOf' x
           wy = sizeOf' y
   getExternalInterface' n ~(x :*: y) =
-       metaNameHint (show n) (getExternalInterface' n x)
-    <> metaNameHint (show (n+1)) (getExternalInterface' (n+1) y)
+       metaNameHint ("tpl" ++ show n) (getExternalInterface' n x)
+    <> metaNameHint ("tpl" ++ show (n+1)) (getExternalInterface' (n+1) y)
 
 instance (Bits c) => Bits' (K1 i c) where
   type SizeOf' (K1 i c) = SizeOf c
@@ -112,8 +112,9 @@ instance (Bits' f, Selector t) => Bits' (M1 S t f) where
   sizeOf' ~(M1 x) = sizeOf' x
   pack' ~(M1 x) = pack' x
   unpack' = M1 . unpack'
-  getExternalInterface' n m@(~(M1 x)) =
-    metaNameHint (selName m) (getExternalInterface' n x)
+  getExternalInterface' n m@(~(M1 x))
+    | null $ selName m = getExternalInterface' n x
+    | otherwise = metaNameHint (selName m) (getExternalInterface' n x)
 
 instance {-# OVERLAPPABLE #-} (Bits' f) => Bits' (M1 i t f) where
   type SizeOf' (M1 i t f) = SizeOf' f
