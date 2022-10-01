@@ -5,6 +5,7 @@
 module TinyBlarney.Core.NetPrimitives (
   InstanceId
 , NetOutput
+, prettyNetOutput
 , Net (..)
 , prettyNet
 , NetlistArray
@@ -38,6 +39,11 @@ err m = error $ "TinyBlarney.Core.NetPrimitives: " ++ m
 --   '(InstanceId, CircuitInterfacePath)' pair.
 type NetOutput = (InstanceId, CircuitInterfacePath)
 
+-- | Pretty print a 'NetOutput'.
+prettyNetOutput :: NetOutput -> Doc
+prettyNetOutput (i, cPath) =
+  text "net" PP.<> int i PP.<> prettyCircuitInterfacePath cPath
+
 -- | A type to represent a 'Net' input.
 data NetPort =
     -- | Constructor wrapping another 'Net''s output.
@@ -48,8 +54,7 @@ data NetPort =
 
 -- | Pretty print a 'NetPort'.
 prettyNetPort :: NetPort -> Doc
-prettyNetPort (NetPort (i, cPath)) =
-  text "net" PP.<> int i PP.<> prettyCircuitInterfacePath cPath
+prettyNetPort (NetPort nOut) = prettyNetOutput nOut
 prettyNetPort (NetPortInlined p ins) =
   text "Op" PP.<> parens (primPretty p PP.<> sep (prettyNetPort <$> ins))
 
