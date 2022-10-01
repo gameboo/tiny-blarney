@@ -56,7 +56,9 @@ flattenBV bv = do
   visited <- getVisited
   when (not $ bv.instanceId `IntSet.member` visited) do
     putVisited $ IntSet.insert bv.instanceId visited
-    inPorts <- mapM flattenBV (snd <$> bv.receivedSignals)
+    inPorts <- sequence [ do nPort <- flattenBV b
+                             return (path, nPort)
+                        | (path, b) <- bv.receivedSignals ]
     addNet MkNet { instanceId = bv.instanceId
                  , primitive  = bv.primitive
                  , inputPorts = inPorts }

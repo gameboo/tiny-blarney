@@ -18,17 +18,16 @@ module TinyBlarney.Backends.Verilog (
 
 import TinyBlarney.Core
 
+import Prelude hiding ((<>))
 import Data.List
+import qualified Data.Map as M
 import Data.Array
 import Data.Maybe
 import Data.Foldable
 import qualified Data.Sequence as Seq
-import Control.Monad.Identity
-import Control.Monad.Writer hiding (Product)
 import Control.Monad.Reader
 import Numeric (showHex)
-import Text.PrettyPrint hiding ((<>))
-import qualified Text.PrettyPrint as PP ((<>))
+import Text.PrettyPrint
 
 -- | local error helper function
 err :: String -> a
@@ -44,184 +43,196 @@ writeVerilogModule c = render $ prettyVerilogModule c
 --------------------------------------------------------------------------------
 
 -- pretty helpers
-dot = char '.'
+spaces :: Int -> Doc
 spaces n = hcat $ replicate n space
+hexInt :: Integer -> Doc
 hexInt n = text (showHex n "")
-argStyle = sep . punctuate comma
-
--- derive name for interface port
-ifcName :: String -> [String] -> String
-ifcName dflt [] = dflt
-ifcName _ xs = intercalate "_" (reverse xs)
-
-ifcPort :: CircuitLeafCtxt -> (String, PortDir, BitWidth)
-ifcPort MkCircuitLeafCtxt{..} = case ifc of
-  Port In w -> (ifcName ("arg" ++ show idx) nameHints, In, w)
-  Port Out w -> (ifcName ("retVal" ++ show idx) nameHints, Out, w)
-  where idx = case path of _ :|> n -> show n
-                           _ -> ""
-
-ifcPorts :: CircuitInterface -> [(String, PortDir, BitWidth)]
-ifcPorts = onCircuitInterfaceLeaves ifcPort
+commaSep :: [Doc] -> Doc
+commaSep = sep . punctuate comma
 
 -- | code generation for a Verilog module
 prettyVerilogModule :: Circuit -> Doc
-prettyVerilogModule circuit =
-  header $+$ nest 2 (vcat [declBlk, instBlk, alwsBlk]) $+$ footer
+prettyVerilogModule circuit@Circuit{..} =
+  vcat [headerDoc, nest 2 $ vcat [declDoc, instDoc, alwsDoc], footerDoc]
   where
-  header = text "module" <+> text circuit.name
-                         <+> parens (argStyle (modPort <$> ports))
-                         PP.<> semi
-  declBlk = declDocs
-  instBlk = instDocs
-  alwsBlk = if isEmpty alwsDocs then empty else
-        text "always" <+> char '@' PP.<> parens (text "posedge clock")
-    <+> text "begin" $+$ nest 2 (wrapRstBlk alwsDocs) $+$ text "end"
-  wrapRstBlk blk = if isEmpty rstDocs then blk else
-        text "if (reset) begin" $+$ nest 2 rstDocs
-    $+$ text "end else begin" $+$ nest 2 blk $+$ text "end"
-  footer = text "endmodule"
-  -- CircuitInterface as a module argument list
-  ports = ifcPorts . externalCircuitInterface $ circuit
-  modPort (nm, pDir, w) = let tDir = case pDir of In -> "input"
-                                                  Out -> "output"
-    in text tDir <+> text "wire" <+> brackets (int (w-1) PP.<> text ":0")
-                 <+> text nm
-  -- generate the appropriate 'Doc's for the netlist
-  netDocs = genAllNetDocs circuit.netlist
-  declDocs = sep $ toList netDocs.decl
-  instDocs = sep $ toList netDocs.inst
-  alwsDocs = sep $ toList netDocs.alws
-  rstDocs  = sep $ toList netDocs.rst
+    -- Module header (module statement and interface ports)
+    headerDoc = text "module" <+> text name <+> parens modArgs <> semi
+    ifcPort ctxt@MkCircuitLeafCtxt{..} = case (mInstanceId, ifc) of
+      (Just nId, Port pDir w) ->
+        (fromMaybe (err errMsg) $ M.lookup (nId, path) netnames, pDir, w)
+      (_, _) -> err errMsg
+      where errMsg =
+                 "Could not identify interface port, ctxt: " ++ show ctxt
+              ++ " - netnames: " ++ show netnames
+    ifcPorts =
+      onCircuitInterfaceLeaves ifcPort $ externalCircuitInterface circuit
+    ifcPortDoc (nm, pDir, w) =
+      text vDir <+> text "wire" <+> brackets (int (w-1) <> text ":0")
+                <+> text nm
+      where vDir = case pDir of In -> "input"
+                                Out -> "output"
+    modArgs = commaSep (ifcPortDoc <$> ifcPorts)
+    -- declarations of Nets
+    declDoc = sep declDocs
+    -- instanciation of Nets
+    instDoc = sep instDocs
+    -- triggered always_ff blocks
+    alwsDoc = sep alwsDocs -- TODO reset block
+    -- module footer
+    footerDoc = text "emdmodule"
+    -- generate names for the nets of the netlist
+    netnames = netNames deriveNames netlist
+    deriveNames dflt [] = dflt
+    deriveNames    _ xs = intercalate "_" $ reverse xs
+    -- generate the 'Doc's for the netlist
+    netDocs = genAllNetDocs Env { netlist = (\(Netlist x) -> x) netlist
+                                , netnames = netnames }
+    declDocs = map (\NetDocs{..} -> decl) netDocs
+    instDocs = map (\NetDocs{..} -> inst) netDocs
+    alwsDocs = map (\NetDocs{..} -> alws) netDocs
+    rstDocs = map (\NetDocs{..} -> rst) netDocs
 
+--------------------------------------------------------------------------------
 -- NetDocs helper type
-data NetDocs = NetDocs { decl :: Seq.Seq Doc
-                       , inst :: Seq.Seq Doc
-                       , alws :: Seq.Seq Doc
-                       , rst  :: Seq.Seq Doc } deriving Show
+data NetDocs = NetDocs { decl :: Doc
+                       , inst :: Doc
+                       , alws :: Doc
+                       , rst  :: Doc } deriving Show
 
--- | 'NetDocs' is a 'Semigroup'
-instance Semigroup NetDocs where
-  nd0 <> nd1 = nd0 { decl = nd0.decl <> nd1.decl
-                   , inst = nd0.inst <> nd1.inst
-                   , alws = nd0.alws <> nd1.alws
-                   , rst  = nd0.rst  <> nd1.rst }
+-- | NetDocs generator monad
+type GenNetDocs = Reader Env
 
--- | 'NetDocs' is a 'Monoid'
-instance Monoid NetDocs where
-  mempty = NetDocs { decl = mempty
-                   , inst = mempty
-                   , alws = mempty
-                   , rst  = mempty }
+-- | NetDocs generator reader monad environment
+data Env = Env { netlist :: NetlistArray
+               , netnames :: M.Map NetOutput String }
 
-newtype GenNetDocs a = GenNetDocs {
-  unGenNetDocs :: ReaderT NetlistArray (WriterT NetDocs Identity) a
-} deriving ( Functor
-           , Applicative
-           , Monad
-           , MonadReader NetlistArray
-           , MonadWriter NetDocs )
+genAllNetDocs :: Env -> [NetDocs]
+genAllNetDocs env = runReader (mapM genNetDocs $ elems env.netlist) env
 
-genAllNetDocs :: Netlist -> NetDocs
-genAllNetDocs (Netlist nl) =
-  runIdentity $ execWriterT (runReaderT (unGenNetDocs gen) nl)
-  where gen = mapM genNetDocs (elems nl)
-
-genNetDocs :: Net -> GenNetDocs ()
+genNetDocs :: Net -> GenNetDocs NetDocs
 genNetDocs n = do newDecl <- genNetDeclDoc n
                   newInst <- genNetInstDoc n
                   newAlws <- genNetAlwsDoc n
                   newRst  <- genNetRstDoc n
-                  tell NetDocs { decl = Seq.singleton newDecl
-                               , inst = Seq.singleton newInst
-                               , alws = Seq.singleton newAlws
-                               , rst  = Seq.singleton newRst }
+                  return NetDocs { decl = newDecl
+                                 , inst = newInst
+                                 , alws = newAlws
+                                 , rst  = newRst }
 
---------------------------------------------------------------------------------
 -- | Code generation for Verilog declarations
 genNetDeclDoc :: Net -> GenNetDocs Doc
-genNetDeclDoc n = return case n.primitive of
-  (Constant k w) -> declareIdent nOut Wire (IntInitVal k) w
-  (DontCare w) -> declareIdent nOut Wire DontCareInitVal w
-  (And w) -> declareIdent nOut Wire NoInitVal w
-  (Or w) -> declareIdent nOut Wire NoInitVal w
-  (Xor w) -> declareIdent nOut Wire NoInitVal w
-  (Invert w) -> declareIdent nOut Wire NoInitVal w
-  (Concatenate w0 w1) -> declareIdent nOut Wire NoInitVal (w0 + w1)
-  (Slice _ w) -> declareIdent nOut Wire NoInitVal w
-  (Interface ifc) -> sep (declIfcPort <$> getPortOuts ifc)
-  _ -> mempty
+genNetDeclDoc n = case n.primitive of
+  (Constant k w) -> genIdentDecl nOut Wire (IntInitVal k) w
+  (DontCare w) -> genIdentDecl nOut Wire DontCareInitVal w
+  (And w) -> genIdentDecl nOut Wire NoInitVal w
+  (Or w) -> genIdentDecl nOut Wire NoInitVal w
+  (Xor w) -> genIdentDecl nOut Wire NoInitVal w
+  (Invert w) -> genIdentDecl nOut Wire NoInitVal w
+  (Concatenate w0 w1) -> genIdentDecl nOut Wire NoInitVal (w0 + w1)
+  (Slice _ w) -> genIdentDecl nOut Wire NoInitVal w
+  (Interface ifc) -> sep <$> mapM genIfcPortDecl (getPortOuts ifc)
+  _ -> return empty
   where nId = n.instanceId
         nOut = netOutput n
-        declIfcPort (p, Port Out w) = declareIdent (nId, p) Wire NoInitVal w
-        declIfcPort _ = err $ "unsupported interface net: " ++ show n
+        genIfcPortDecl (p, Port Out w) = genIdentDecl (nId, p) Wire NoInitVal w
+        genIfcPortDecl _ = err $ "unsupported interface net: " ++ show n
+
 
 -- | Code generation for Verilog instantiations
 genNetInstDoc :: Net -> GenNetDocs Doc
-genNetInstDoc n = return case n.primitive of
+genNetInstDoc n = case n.primitive of
   (And _) -> instPrim
   (Or _) -> instPrim
   (Xor _) -> instPrim
   (Invert _) -> instPrim
   (Concatenate _ _) -> instPrim
   (Slice _ _) -> instPrim
-  (Interface ifc) -> sep (instIfcPort <$> getPorts ifc)
-  _ -> mempty
-  where nId = n.instanceId
-        nOut = netOutput n
-        instPrim = pAssign (pIdent nOut) (pPrim n.primitive n.inputPorts)
-        instIfcPort (p, Port In w) =
-          pAssign (text "TODO") (pNetPort $ netInput n)
-        instIfcPort (p, Port Out w) = pAssign (pIdent (nId, p)) (text "TODO")
-        instIfcPort _ = err $ "unsupported interface net: " ++ show n
+  (Interface ifc) -> do
+    let rets = sortOn snd $ netInputsAsNetOutput n
+    let vals = sortOn fst $ netInputs n
+    sep <$> (zipWithM instPort rets vals)
+  _ -> return empty
+  where
+    instPrim = do identDoc <- askIdent $ netOutput n
+                  primDoc <- genPrimRep n.primitive (snd <$> n.inputPorts)
+                  return $ vAssign identDoc primDoc
+    instPort nOut@(_, p0) (p1, nPort) | p0 == p1 = do
+      identDoc <- askIdent nOut
+      valDoc <- genNetPortRep nPort
+      return $ vAssign identDoc valDoc
+                                      | otherwise =
+      err $ "mismatched exported signal for " ++ show n
 
 -- | Code generation for Verilog always block statements
 genNetAlwsDoc :: Net -> GenNetDocs Doc
-genNetAlwsDoc n = return case n.primitive of
-  _ -> mempty
+genNetAlwsDoc n = case n.primitive of
+  _ -> return empty
 
 -- | Code generation for Verilog reset statements
 genNetRstDoc :: Net -> GenNetDocs Doc
-genNetRstDoc n = return case n.primitive of
-  _ -> mempty
+genNetRstDoc n = case n.primitive of
+  _ -> return empty
 
 --------------------------------------------------------------------------------
-pIntLit :: Integer -> BitWidth -> Doc
-pIntLit v w = int w <> text "'h" <> hexInt v
-pDontCare :: BitWidth -> Doc
-pDontCare w = int w <> text "'b" <> text (replicate w 'x')
-pIdent :: NetOutput -> Doc
-pIdent (instId, path) =
-  text "net" <> int instId <> prettyCircuitInterfacePath path
-pAssign :: Doc -> Doc -> Doc
-pAssign lhs rhs = (text "assign" <+> lhs <+> equals <+> rhs) <> semi
 
-pPrim :: Primitive -> [NetPort] -> Doc
-pPrim (Constant k w) [] = pIntLit k w
-pPrim (DontCare w) [] = pDontCare w
-pPrim (And _) [x, y] = pNetPort x <+> char '&' <+> pNetPort y
-pPrim (Or _) [x, y] = pNetPort x <+> char '|' <+> pNetPort y
-pPrim (Xor _) [x, y] = pNetPort x <+> char '^' <+> pNetPort y
-pPrim (Invert _) [x] = char '~' <> parens (pNetPort x)
-pPrim (Concatenate _ _) [x, y] = braces $ (pNetPort x <> comma) <+> pNetPort y
-pPrim (Slice (hi, lo) _) [x] =
-  parens (pNetPort x) <> brackets (int hi <> colon <> int lo)
-pPrim p _ = err $ "unsupported Prim '" ++ show p ++ "' encountered"
-
-pNetPort :: NetPort -> Doc
-pNetPort (NetPort netOut) = pIdent netOut
-pNetPort (NetPortInlined p ins) = parens $ pPrim p ins
-
+-- | Verilog Wire or Register
 data WireOrReg = Wire | Reg
+-- | Initialization value type
 data InitVal = NoInitVal | IntInitVal Integer | DontCareInitVal
-declareIdent :: NetOutput -> WireOrReg -> InitVal -> BitWidth -> Doc
-declareIdent netOut wireOrReg initVal w =
-  (wireOrRegDoc <+> widthDoc <+> pIdent netOut <+> initDoc) <> semi
+
+-- Verilog identifier declaration
+genIdentDecl :: NetOutput -> WireOrReg -> InitVal -> BitWidth
+             -> GenNetDocs Doc
+genIdentDecl nOut wireOrReg initVal w = do
+  identDoc <- askIdent nOut
+  return $ wireOrRegDoc <+> widthDoc <+> identDoc <+> initDoc <> semi
   where
   wireOrRegDoc = case wireOrReg of Wire -> text "wire"
                                    Reg  -> text "reg"
-  widthDoc = if w > 1 then brackets (int (w-1) <> text ":0") else empty
+  widthDoc = if w > 1 then brackets (int (w-1) <> text ":0") else mempty
   initDoc = case initVal of
-    NoInitVal -> empty
-    IntInitVal x -> equals <+> pIntLit x w
-    DontCareInitVal -> equals <+> pDontCare w
+    NoInitVal -> mempty
+    IntInitVal x -> equals <+> vIntLit x w
+    DontCareInitVal -> equals <+> vDontCare w
+
+-- | Get a verilog identifier out of the net name map
+askIdent :: NetOutput -> GenNetDocs Doc
+askIdent nOut = do
+  env <- ask
+  let Just name = M.lookup nOut env.netnames
+  return $ text name
+
+genNetPortRep :: NetPort -> GenNetDocs Doc
+genNetPortRep (NetPort netOut) = askIdent netOut
+genNetPortRep (NetPortInlined p ins) = parens <$> genPrimRep p ins
+
+genPrimRep :: Primitive -> [NetPort] -> GenNetDocs Doc
+genPrimRep prim ins = case (prim, ins) of
+  (Constant k w, []) -> return $ vIntLit k w
+  (DontCare w, []) -> return $ vDontCare w
+  (And _, [x, y]) -> binOp "&" x y
+  (Or _, [x, y]) -> binOp "|" x y
+  (Xor _, [x, y]) -> binOp "^" x y
+  (Invert _, [x]) -> unOp "~" x
+  (Concatenate _ _, [x, y]) -> do
+    xDoc <- genNetPortRep x
+    yDoc <- genNetPortRep y
+    return $ braces $ commaSep [xDoc, yDoc]
+  (Slice (hi, lo) _, [x]) -> do
+    xDoc <- genNetPortRep x
+    return $ parens xDoc <> brackets (int hi <> colon <> int lo)
+  (_, _) -> err $ "unsupported Prim '" ++ show prim ++ "' encountered"
+  where binOp op x y = do xDoc <- genNetPortRep x
+                          yDoc <- genNetPortRep y
+                          return $ xDoc <+> text op <+> yDoc
+        unOp op x = do xDoc <- genNetPortRep x
+                       return $ text op <> parens xDoc
+
+--------------------------------------------------------------------------------
+-- Verilog helpers
+vIntLit :: Integer -> BitWidth -> Doc
+vIntLit v w = int w <> text "'h" <> hexInt v
+vDontCare :: BitWidth -> Doc
+vDontCare w = int w <> text "'b" <> text (replicate w 'x')
+vAssign :: Doc -> Doc -> Doc
+vAssign lhs rhs = (text "assign" <+> lhs <+> equals <+> rhs) <> semi

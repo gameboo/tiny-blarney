@@ -12,6 +12,7 @@ module TinyBlarney.Core.NetPrimitives (
 , Netlist (..)
 , prettyNetlist
 , NetPort (..)
+, NetInput
 , prettyNetPort
 , Primitive (..)
 , prettyPrimitive
@@ -62,21 +63,32 @@ prettyNetPort (NetPortInlined p ins) =
 instance Show NetPort where
   show = render . prettyNetPort
 
+-- | A type to refer to a net input port. 'NetInput' is a
+--   '(CircuitInterfacePath, NetPort)' pair.
+type NetInput = (CircuitInterfacePath, NetPort)
+
+-- | Pretty print a 'NetInput'.
+prettyNetInput :: NetInput -> Doc
+prettyNetInput (cPath, nPort) =
+  prettyCircuitInterfacePath cPath <+> text ":=" <+> prettyNetPort nPort
+
 -- | A type to represent a netlist node.
 data Net =
   MkNet { instanceId :: InstanceId -- ^ a unique instance identifier
         , primitive  :: Primitive  -- ^ a primitive operation
-        , inputPorts :: [NetPort]  -- ^ a list of inputs
+        , inputPorts :: [NetInput]  -- ^ a list of inputs
         }
 
 -- | Pretty print a 'Net'.
 prettyNet :: Net -> Doc
 prettyNet MkNet{..} = text "net" PP.<> int instanceId <+> sep xs
-  where xs = [ primPretty primitive
-             , case inputPorts of
-                 [] -> text "No Inputs"
-                 ys -> text "Inputs"
-                       <+> braces (nest 2 (sep (prettyNetPort <$> ys))) ]
+  where
+    xs = [ primPretty primitive
+         , case inputPorts of
+             [] -> text "No Inputs"
+             ys -> text "Inputs"
+                   <+> braces (nest 2 (commaSep (prettyNetInput <$> ys))) ]
+    commaSep = sep . punctuate comma
 
 -- | Show instance for 'Net'.
 instance Show Net where

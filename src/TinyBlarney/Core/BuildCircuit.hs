@@ -18,9 +18,14 @@ import TinyBlarney.Core.FlattenBV
 import TinyBlarney.Core.NetPrimitives
 import TinyBlarney.Core.CircuitInterface
 
+import Data.List
 import Data.Array
 import GHC.TypeLits
 import Text.PrettyPrint hiding ((<>))
+
+-- | local error helper function
+err :: String -> a
+err m = error $ "TinyBlarney.Core.BuildCircuit: " ++ m
 
 --------------------------------------------------------------------------------
 -- | Build an interface for a circuit function based on its type signature
@@ -41,39 +46,44 @@ buildCircuitInterface = buildCircuitIfc 0
 --------------------------------------------------------------------------------
 -- apply circuit function to get root BVs for a blarney circuit
 
-addOut :: CircuitInterfacePath -> ([PathAndBV], [BV]) -> BV
-       -> ([PathAndBV], [BV])
-addOut path (outs, roots) bv = ((path, bv):outs, bv:roots)
+data GenCircuitAcc = GenCircuitAcc { outs  :: [PathAndBV]
+                                   , roots :: [BV] } deriving Show
 
-addRoot :: ([PathAndBV], [BV]) -> BV -> ([PathAndBV], [BV])
-addRoot (outs, roots) bv = (outs, bv:roots)
+addOut :: GenCircuitAcc -> CircuitInterfacePath -> BV -> GenCircuitAcc
+addOut acc path bv = acc { outs = (path, bv) : acc.outs
+                         , roots = bv : acc.roots }
+
+addRoot :: GenCircuitAcc -> BV -> GenCircuitAcc
+addRoot acc bv = acc { roots = bv : acc.roots }
 
 class GenCircuit t where
-  genCircuit :: t -> [BV] -> CircuitInterfacePath -> ([PathAndBV], [BV])
-             -> ([PathAndBV], [BV])
+  genCircuit :: GenCircuitAcc -> [PathAndBV] -> [CircuitInterfacePath] -> t
+             -> GenCircuitAcc
 
 instance {-# OVERLAPPABLE #-} (Bits a) => GenCircuit a where
-  genCircuit x [] path acc = addOut path acc (pack x).bv
+  genCircuit acc [] outs x =
+    foldl (\a (p, bv) -> addOut a p bv) acc (zip outs (getBVs x))
+  --genCircuit acc [] outs x = addOut acc zip outs (getBVs x)
+  genCircuit acc ins outs x = err $
+    show acc ++ show ins ++ show outs -- ++ show x
 
 instance (Bits a, GenCircuit t) => GenCircuit (a -> t) where
-  -- XXX should traverse an ifc and update path as we go
-  genCircuit f (bv : bvs) path acc = genCircuit (f . unpack $ AsBit bv) bvs path acc
+  genCircuit acc ((_, bv):rest) outPaths f =
+    genCircuit acc rest outPaths (f . unpack $ AsBit bv)
 
 getCircuitRoots :: GenCircuit a => a -> CircuitInterface -> [BV]
-getCircuitRoots f ifc = rootBVs
-  where (outBVs, rootBVs) = genCircuit f inBVs NoStep ([], [])
-        inBVs = mkInterfaceBV ifc outBVs
+getCircuitRoots f ifc = res.roots
+  where res = genCircuit dfltAcc inPathAndBVs outPaths f
+        inBVs = mkInterfaceBV (flipCircuitInterface ifc) res.outs
+        inPathAndBVs = zip (getPortInPaths ifc) inBVs
+        outPaths = getPortOutPaths ifc
+        dfltAcc = GenCircuitAcc { outs = [], roots = [] }
 
 --------------------------------------------------------------------------------
 -- produce Circuit Netlist and Interface
 
 data Circuit = Circuit { name :: String
                        , netlist :: Netlist }
-
-externalCircuitInterface :: Circuit -> CircuitInterface
-externalCircuitInterface Circuit{..} =
- head [ flipCircuitInterface ifc
-      | MkNet{primitive = Interface ifc} <- elems netlist.netlistArray ]
 
 prettyCircuit :: Circuit -> Doc
 prettyCircuit circuit =
@@ -85,9 +95,17 @@ prettyCircuit circuit =
 instance Show Circuit where
   show = render . prettyCircuit
 
+externalCircuitInterface :: Circuit -> CircuitInterface
+externalCircuitInterface Circuit{..} = mconcat (snd <$> ifcs)
+  where
+    ifcs = sortOn fst [ (nId, metaInstanceId nId $ flipCircuitInterface ifc)
+                      | n@MkNet{ instanceId = nId
+                               , primitive = Interface ifc }
+                        <- elems netlist.netlistArray ]
+
 buildCircuitWith :: GenCircuit a => String -> CircuitInterface -> a -> Circuit
 buildCircuitWith nm ifc f = Circuit { name = nm, netlist = nl }
-  where nl = flattenFromRoots $ getCircuitRoots f (flipCircuitInterface ifc)
+  where nl = flattenFromRoots $ getCircuitRoots f ifc
 
 buildCircuit :: (BuildCircuitIfc a, GenCircuit a) => String -> a -> Circuit
 buildCircuit nm f = buildCircuitWith nm (buildCircuitInterface f) f
