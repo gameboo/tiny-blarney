@@ -1,6 +1,9 @@
-{-# LANGUAGE DataKinds #-}
+{-# LANGUAGE DataKinds      #-}
+{-# LANGUAGE DeriveGeneric  #-}
+{-# LANGUAGE DeriveAnyClass #-}
 
 import TinyBlarney
+import GHC.Generics
 
 halfAdder :: Bit 1 -> Bit 1 -> (Bit 1, Bit 1)
 halfAdder x y = (sum, carry)
@@ -13,11 +16,18 @@ fullAdder cIn x y = (sum, cOut)
         (sum, c1) = halfAdder s0 cIn
         cOut = c0 `bitOr` c1
 
-carryChainAdder :: Bit 1 -> Bit n -> Bit n -> (Bit n, Bit 1)
-carryChainAdder cIn x y = (unsafeFromBitList ss, last cs)
+rawCarryChainAdder :: Bit 1 -> Bit n -> Bit n -> (Bit n, Bit 1)
+rawCarryChainAdder cIn x y = (unsafeFromBitList ss, last cs)
   where ins = zip (unsafeToBitList x) (unsafeToBitList y)
         allFas = scanl (\(_, c) (x, y) -> fullAdder c x y) (bitZero, cIn) ins
         (ss, cs) = unzip $ tail allFas
+
+data AdderRes n = AdderRes { sum :: Bit n
+                           , carry :: Bit 1 } deriving (Generic, Bits)
+
+carryChainAdder :: Bit 1 -> Bit n -> Bit n -> AdderRes n
+carryChainAdder cIn x y =
+  (\(sum, carry) -> AdderRes sum carry) $ rawCarryChainAdder cIn x y
 
 main:: IO ()
 main = do

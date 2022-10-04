@@ -106,8 +106,7 @@ instance (Bits' f, Bits' g) => Bits' (f :*: g) where
           wx = sizeOf' x
           wy = sizeOf' y
   getExternalInterface' n ~(x :*: y) =
-       metaNameHint ("tpl" ++ show n) (getExternalInterface' n x)
-    <> metaNameHint ("tpl" ++ show (n+1)) (getExternalInterface' (n+1) y)
+    getExternalInterface' n x <> getExternalInterface' (n+1) y
   getBVs' ~(x :*: y) = getBVs' x ++ getBVs' y
 
 instance (Bits c) => Bits' (K1 i c) where
@@ -124,7 +123,7 @@ instance (Bits' f, Selector t) => Bits' (M1 S t f) where
   pack' ~(M1 x) = pack' x
   unpack' = M1 . unpack'
   getExternalInterface' n m@(~(M1 x))
-    | null $ selName m = getExternalInterface' n x
+    | null $ selName m = metaNameHint "tpl" $ getExternalInterface' n x
     | otherwise = metaNameHint (selName m) (getExternalInterface' n x)
   getBVs' ~(M1 x) = getBVs' x
 
