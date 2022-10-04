@@ -136,6 +136,7 @@ mkSliceBV (hi, lo) x = mkUnOpBV (Slice (hi, lo) $ unsafeBVBitWidth x) x
 
 mkCustomBV :: Primitive -> [PathAndBV] -> [BV]
 mkCustomBV p@Custom{..} rcvSigs = mkPrimitive p rcvSigs
+mkCustomBV p _ = err $ show p ++ " is not a Custom primitive"
 
 mkInterfaceBV :: CircuitInterface -> [PathAndBV] -> [BV]
 mkInterfaceBV ifc rcvSigs = mkPrimitive (Interface ifc) rcvSigs
