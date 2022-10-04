@@ -14,6 +14,9 @@ module TinyBlarney.Core.NetPrimitives (
 , NetPort (..)
 , NetInput
 , prettyNetPort
+, Circuit (..)
+, Backend
+, prettyCircuit
 , Primitive (..)
 , prettyPrimitive
 , primInterface
@@ -25,6 +28,7 @@ module TinyBlarney.Core.NetPrimitives (
 ) where
 
 import Data.Array
+import qualified Data.Map as M
 import Text.PrettyPrint hiding ((<>))
 import qualified Text.PrettyPrint as PP ((<>))
 
@@ -160,10 +164,7 @@ data Primitive =
   | Slice (Int, Int) BitWidth
 
     -- | A custom component
-  | Custom { name :: String -- ^ component's name
-           , interface :: CircuitInterface -- ^ component's interface
-           , mNetlist :: Maybe Netlist -- ^ potential netlist for the component
-           }
+  | Custom Circuit
 
     -- | A circuit interface primitive
     --   BVs with this primitive are flatten roots or flatten leaves based on
@@ -186,6 +187,41 @@ data Primitive =
     --     constructor be the one with the second described polarity.
     --   )
   | Interface CircuitInterface
+
+-- | A built 'Circuit' with a name and a 'CircuitInterface', and possibly a
+--  'Netlist' and an implementation for a given backend
+data Circuit = Circuit {
+  -- | circuit's name
+  name :: String
+  -- | circuit's interface
+, interface :: CircuitInterface
+  -- | potential netlist for the circuit
+, mNetlist :: Maybe Netlist
+  -- | potential inplementations for given backends
+, implementations :: M.Map Backend FilePath
+}
+
+-- | Pretty-print a 'Circuit'
+prettyCircuit :: Circuit -> Doc
+prettyCircuit circuit =
+  hang (text "Circuit -" <+> text circuit.name) 2 (vcat [pIfc, pNl, pImpls])
+  where
+    pIfc =
+      text "- interface:" <+> nest 2 (prettyCircuitInterface circuit.interface)
+    pNl = case circuit.mNetlist of
+            Just nl -> text "- netlist:" <+> nest 2 (prettyNetlist nl)
+            _ -> empty
+    pImpls = if null circuit.implementations then empty
+             else text $ show circuit.implementations
+
+-- | 'Show' instance for 'Circuit'
+instance Show Circuit where
+  show = render . prettyCircuit
+
+-- | A type to identify a TinyBlarney backend
+data Backend =
+    Verilog -- ^ TinyBlarney's verilog backend
+  deriving (Eq, Ord, Show)
 
 -- | Pretty print a 'Primitive'.
 prettyPrimitive :: Primitive -> Doc
@@ -275,12 +311,9 @@ primInfo (Slice (hi, lo) w) = MkPrimitiveInfo {
 , prettyDoc =
     pDoc (text "Slice" PP.<> parens (int hi PP.<> comma <+> int lo)) ifc
 } where ifc = ifcUnaryOp w (hi-lo+1)
-primInfo p@Custom{..} = MkPrimitiveInfo {
-  interface = p.interface
-, prettyDoc =
-    let nl = case mNetlist of Nothing -> text "No Netlist"
-                              Just _ -> text "Some Netlist"
-    in pDoc (text "Custom: " <+> text name <+> char '-' <+> nl) p.interface
+primInfo (Custom circuit) = MkPrimitiveInfo {
+  interface = circuit.interface
+, prettyDoc = text "Prim Custom: " <+> prettyCircuit circuit
 }
 primInfo (Interface ifc) = MkPrimitiveInfo {
   interface = ifc

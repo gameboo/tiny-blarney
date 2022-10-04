@@ -3,10 +3,7 @@
 {-# LANGUAGE UndecidableInstances #-}
 
 module TinyBlarney.Core.BuildCircuit (
-  Circuit (..)
-, prettyCircuit
-, buildCircuitInterface
-, externalCircuitInterface
+  buildCircuitInterface
 , buildCircuitWith
 , buildCircuit
 ) where
@@ -15,11 +12,10 @@ import TinyBlarney.Core.BV
 import TinyBlarney.Core.Bit
 import TinyBlarney.Core.Bits
 import TinyBlarney.Core.FlattenBV
+import TinyBlarney.Core.NetHelpers
 import TinyBlarney.Core.NetPrimitives
 import TinyBlarney.Core.CircuitInterface
 
-import Data.List
-import Data.Array
 import GHC.TypeLits
 import Text.PrettyPrint hiding ((<>))
 
@@ -29,35 +25,13 @@ err m = error $ "TinyBlarney.Core.BuildCircuit: " ++ m
 
 --------------------------------------------------------------------------------
 
--- | A built 'Circuit' with its name and netlist
-data Circuit = Circuit { name :: String
-                       , netlist :: Netlist }
-
--- | Pretty-print a 'Circuit'
-prettyCircuit :: Circuit -> Doc
-prettyCircuit circuit =
-  hang (text "Circuit -" <+> text circuit.name) 2 (pIfc $+$ pNl)
-  where ifc = externalCircuitInterface circuit
-        pIfc = text "- interface:" <+> nest 2 (prettyCircuitInterface ifc)
-        pNl  = text "- netlist:" <+> nest 2 (prettyNetlist circuit.netlist)
-
--- | 'Show' instance for 'Circuit'
-instance Show Circuit where
-  show = render . prettyCircuit
-
--- | Return the exposed external 'CircuitInterface' of the given 'Circuit'
-externalCircuitInterface :: Circuit -> CircuitInterface
-externalCircuitInterface Circuit{..} = mconcat (snd <$> ifcs)
-  where
-    ifcs = sortOn fst [ (nId, metaInstanceId nId $ flipCircuitInterface ifc)
-                      | n@MkNet{ instanceId = nId
-                               , primitive = Interface ifc }
-                        <- elems netlist.netlistArray ]
-
 -- | Build a 'Circuit' from a name, a 'CircuitInterface' and a TinyBlarney
 --   circuit function in 'GenCircuit'
 buildCircuitWith :: GenCircuit a => String -> CircuitInterface -> a -> Circuit
-buildCircuitWith nm ifc f = Circuit { name = nm, netlist = nl }
+buildCircuitWith nm ifc f = Circuit { name = nm
+                                    , interface = externalNetlistInterface nl
+                                    , mNetlist = Just nl
+                                    , implementations = mempty }
   where nl = flattenFromRoots $ getCircuitRoots f ifc
 
 -- | Build a 'Circuit' from a name and a TinyBlarney circuit function in

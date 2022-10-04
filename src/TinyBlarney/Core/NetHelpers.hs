@@ -11,12 +11,14 @@ module TinyBlarney.Core.NetHelpers (
 , remapNetInputInstanceId
 , remapNetInstanceId
 , netNames
+, externalNetlistInterface
 ) where
 
 import TinyBlarney.Core.NetPrimitives
 import TinyBlarney.Core.CircuitInterface
 
 import Data.Map hiding (elems)
+import Data.List
 import Data.Array
 import Text.PrettyPrint
 
@@ -66,6 +68,8 @@ remapNetInstanceId remap net@MkNet{ instanceId = x, inputPorts = y} =
 -- * 'Netlist' helpers
 --------------------------------------------------------------------------------
 
+-- | Derive a map of Net names given a Netlist and a function to process name
+--   hints
 netNames :: (String -> [String] -> String) -> Netlist -> Map NetOutput String
 netNames deriveName Netlist{netlistArray = nl} =
   fromList $ concatMap f (elems nl)
@@ -76,3 +80,10 @@ netNames deriveName Netlist{netlistArray = nl} =
                                    , case n.primitive of Interface _ -> True
                                                          _ -> False ]
               in ins ++ outs
+
+-- | Return the exposed external 'CircuitInterface' of the given 'Circuit'
+externalNetlistInterface :: Netlist -> CircuitInterface
+externalNetlistInterface Netlist{netlistArray = nl} = mconcat (snd <$> ifcs)
+  where ifcs = sortOn fst [ (nId, metaInstanceId nId $ flipCircuitInterface ifc)
+                          | n@MkNet{ instanceId = nId
+                                   , primitive = Interface ifc } <- elems nl ]

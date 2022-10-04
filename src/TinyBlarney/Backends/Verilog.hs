@@ -52,7 +52,7 @@ commaSep = sep . punctuate comma
 
 -- | code generation for a Verilog module
 prettyVerilogModule :: Circuit -> Doc
-prettyVerilogModule circuit@Circuit{..} =
+prettyVerilogModule Circuit{ mNetlist = Just netlist, .. } =
   vcat [headerDoc, nest 2 $ vcat [declDoc, instDoc, alwsDoc], footerDoc]
   where
     -- Module header (module statement and interface ports)
@@ -65,7 +65,7 @@ prettyVerilogModule circuit@Circuit{..} =
                  "Could not identify interface port, ctxt: " ++ show ctxt
               ++ " - netnames: " ++ show netnames
     ifcPorts =
-      onCircuitInterfaceLeaves ifcPort $ externalCircuitInterface circuit
+      onCircuitInterfaceLeaves ifcPort interface
     ifcPortDoc (nm, pDir, w) =
       text vDir <+> text "wire" <+> brackets (int (w-1) <> text ":0")
                 <+> text nm
@@ -91,6 +91,8 @@ prettyVerilogModule circuit@Circuit{..} =
     instDocs = map (\NetDocs{..} -> inst) netDocs
     alwsDocs = map (\NetDocs{..} -> alws) netDocs
     rstDocs = map (\NetDocs{..} -> rst) netDocs
+prettyVerilogModule circuit =
+  err $ "cannot generate verilog for circuit without netlist - " ++ show circuit
 
 --------------------------------------------------------------------------------
 -- NetDocs helper type
