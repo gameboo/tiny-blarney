@@ -4,6 +4,8 @@ module TinyBlarney.Core.NetHelpers (
   netInputPaths
 , netInputsAsNetOutput
 , netInputs
+, netOutputsInfo
+, netOutputWidths
 , netOutputPaths
 , netOutputs
 , netOutput
@@ -36,6 +38,14 @@ netInputsAsNetOutput n = zip (repeat n.instanceId) (netInputPaths n)
 -- | get all input 'NetInput's of a 'Net'
 netInputs :: Net -> [NetInput]
 netInputs = inputPorts
+
+-- | get the output info of a net
+netOutputsInfo :: Net -> [(CircuitInterfacePath, BitWidth)]
+netOutputsInfo = primOutputsInfo . primitive
+
+-- | get the output widths of a net
+netOutputWidths :: Net -> [BitWidth]
+netOutputWidths = primOutputWidths . primitive
 
 -- | get the output paths of a net
 netOutputPaths :: Net -> [CircuitInterfacePath]

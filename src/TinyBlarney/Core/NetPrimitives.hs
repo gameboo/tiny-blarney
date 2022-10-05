@@ -20,7 +20,11 @@ module TinyBlarney.Core.NetPrimitives (
 , Primitive (..)
 , prettyPrimitive
 , primInterface
+, primInputsInfo
+, primInputWidths
 , primInputPaths
+, primOutputsInfo
+, primOutputWidths
 , primOutputPaths
 , primPretty
 , ifcUnaryOp
@@ -243,13 +247,29 @@ data PrimitiveInfo = MkPrimitiveInfo {
 primInterface :: Primitive -> CircuitInterface
 primInterface prim = (primInfo prim).interface
 
+-- | Get general info about a 'Primitive''s inputs.
+primInputsInfo :: Primitive -> [(CircuitInterfacePath, BitWidth)]
+primInputsInfo = getPortInsInfo . primInterface
+
+-- | Get the 'BitWidth's of a 'Primitive''s inputs.
+primInputWidths :: Primitive -> [BitWidth]
+primInputWidths = map snd . primInputsInfo
+
 -- | Get the 'CircuitInterfacePath's of a 'Primitive''s inputs.
 primInputPaths :: Primitive -> [CircuitInterfacePath]
-primInputPaths = getPortInPaths . primInterface
+primInputPaths = map fst . primInputsInfo
+
+-- | Get general info about a 'Primitive''s outputs.
+primOutputsInfo :: Primitive -> [(CircuitInterfacePath, BitWidth)]
+primOutputsInfo = getPortOutsInfo . primInterface
+
+-- | Get the 'BitWidth's of a 'Primitive''s outputs.
+primOutputWidths :: Primitive -> [BitWidth]
+primOutputWidths = map snd . primOutputsInfo
 
 -- | Get the 'CircuitInterfacePath's of a 'Primitive''s outputs.
 primOutputPaths :: Primitive -> [CircuitInterfacePath]
-primOutputPaths = getPortOutPaths . primInterface
+primOutputPaths = map fst . primOutputsInfo
 
 -- | Pretty print a 'Primitive'.
 primPretty :: Primitive -> Doc

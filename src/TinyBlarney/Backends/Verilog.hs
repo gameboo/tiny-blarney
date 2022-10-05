@@ -124,20 +124,22 @@ genNetDocs n = do newDecl <- genNetDeclDoc n
 -- | Code generation for Verilog declarations
 genNetDeclDoc :: Net -> GenNetDocs Doc
 genNetDeclDoc n = case n.primitive of
-  (Constant k w) -> genIdentDecl nOut Wire (IntInitVal k) w
-  (DontCare w) -> genIdentDecl nOut Wire DontCareInitVal w
-  (And w) -> genIdentDecl nOut Wire NoInitVal w
-  (Or w) -> genIdentDecl nOut Wire NoInitVal w
-  (Xor w) -> genIdentDecl nOut Wire NoInitVal w
-  (Invert w) -> genIdentDecl nOut Wire NoInitVal w
-  (Concatenate w0 w1) -> genIdentDecl nOut Wire NoInitVal (w0 + w1)
-  (Slice _ w) -> genIdentDecl nOut Wire NoInitVal w
-  (Interface ifc) -> sep <$> mapM genIfcPortDecl (getPortOuts ifc)
-  _ -> return empty
+  (Constant k w) -> genIdentDecl Wire (IntInitVal k) w nOut
+  (DontCare w) -> genIdentDecl Wire DontCareInitVal w nOut
+  (And w) -> genIdentDecl Wire NoInitVal w nOut
+  (Or w) -> genIdentDecl Wire NoInitVal w nOut
+  (Xor w) -> genIdentDecl Wire NoInitVal w nOut
+  (Invert w) -> genIdentDecl Wire NoInitVal w nOut
+  (Concatenate w0 w1) -> genIdentDecl Wire NoInitVal (w0 + w1) nOut
+  (Slice _ w) -> genIdentDecl Wire NoInitVal w nOut
+  (Custom c) ->
+    sep <$> mapM (\(p, w) -> genIdentDecl Wire NoInitVal w (nId, p)) nOutsInfo
+  (Interface _) -> sep <$> mapM genIfcPortDecl nOutsInfo
+  --_ -> return empty
   where nId = n.instanceId
         nOut = netOutput n
-        genIfcPortDecl (p, Port Out w) = genIdentDecl (nId, p) Wire NoInitVal w
-        genIfcPortDecl _ = err $ "unsupported interface net: " ++ show n
+        nOutsInfo = netOutputsInfo n
+        genIfcPortDecl (p, w) = genIdentDecl Wire NoInitVal w (nId, p)
 
 
 -- | Code generation for Verilog instantiations
@@ -149,14 +151,21 @@ genNetInstDoc n = case n.primitive of
   (Invert _) -> instPrim
   (Concatenate _ _) -> instPrim
   (Slice _ _) -> instPrim
+  (Custom Circuit{..}) -> do
+    ins <- mapM genNetPortRep nPorts
+    outs <- mapM askIdent nOuts
+    return $ vModInst (text name) (text $ name ++ "_net" ++ show n.instanceId)
+                      (ins ++ outs)
   (Interface ifc) -> do
     let rets = sortOn snd $ netInputsAsNetOutput n
-    let vals = sortOn fst $ netInputs n
-    sep <$> (zipWithM instPort rets vals)
+    let args = sortOn fst $ netInputs n
+    sep <$> (zipWithM instPort rets args)
   _ -> return empty
   where
+    nPorts = snd <$> n.inputPorts
+    nOuts = netOutputs n
     instPrim = do identDoc <- askIdent $ netOutput n
-                  primDoc <- genPrimRep n.primitive (snd <$> n.inputPorts)
+                  primDoc <- genPrimRep n.primitive nPorts
                   return $ vAssign identDoc primDoc
     instPort nOut@(_, p0) (p1, nPort) | p0 == p1 = do
       identDoc <- askIdent nOut
@@ -180,12 +189,12 @@ genNetRstDoc n = case n.primitive of
 -- | Verilog Wire or Register
 data WireOrReg = Wire | Reg
 -- | Initialization value type
-data InitVal = NoInitVal | IntInitVal Integer | DontCareInitVal
+data InitVal = IntInitVal Integer | DontCareInitVal | NoInitVal
 
 -- Verilog identifier declaration
-genIdentDecl :: NetOutput -> WireOrReg -> InitVal -> BitWidth
+genIdentDecl :: WireOrReg -> InitVal -> BitWidth -> NetOutput
              -> GenNetDocs Doc
-genIdentDecl nOut wireOrReg initVal w = do
+genIdentDecl wireOrReg initVal w nOut = do
   identDoc <- askIdent nOut
   return $ wireOrRegDoc <+> widthDoc <+> identDoc <+> initDoc <> semi
   where
@@ -238,3 +247,8 @@ vDontCare :: BitWidth -> Doc
 vDontCare w = int w <> text "'b" <> text (replicate w 'x')
 vAssign :: Doc -> Doc -> Doc
 vAssign lhs rhs = (text "assign" <+> lhs <+> equals <+> rhs) <> semi
+vFunCall :: Doc -> [Doc] -> Doc
+vFunCall funNm args = funNm  <+> parens (nest 2 $ commaSep args) <> semi
+vModInst :: Doc -> Doc -> [Doc] -> Doc
+vModInst modNm instNm args =
+  modNm <+> instNm <+> parens (nest 2 $ commaSep args) <> semi
