@@ -206,7 +206,7 @@ queryCircuitInterfaceAt _ _ _ = Nothing
 
 queryCircuitInterfaceLeaves :: CircuitInterfaceQuery a -> CircuitInterface
                             -> [(CircuitInterfacePath, Maybe a)]
-queryCircuitInterfaceLeaves query ifc = go NoStep query ifc
+queryCircuitInterfaceLeaves query ifc = sortOn fst $ go NoStep query ifc
   where go stps query (Meta _ x) = go stps query x
         go stps query (Product xs) =
           concat [go (stps :|> n) query x | (n, x) <- zip [0..] xs]
@@ -226,16 +226,16 @@ getPortIns ifc =
         exposePortIn _ = Nothing
 
 getPortInPaths :: CircuitInterface -> [CircuitInterfacePath]
-getPortInPaths = sort . fst . unzip . getPortIns
+getPortInPaths = fst . unzip . getPortIns
 
 getPortOuts :: CircuitInterface -> [(CircuitInterfacePath, CircuitInterface)]
 getPortOuts ifc =
-  [ (x, y) | (x, Just y) <- queryCircuitInterfaceLeaves exposePortOut ifc ]
+  [ (x, y) | (x, Just y) <- queryCircuitInterfaceLeaves exposePortOut ifc]
   where exposePortOut p@(Port Out _) = Just p
         exposePortOut _ = Nothing
 
 getPortOutPaths :: CircuitInterface -> [CircuitInterfacePath]
-getPortOutPaths = sort . fst . unzip . getPortOuts
+getPortOutPaths = fst . unzip . getPortOuts
 
 getPortOutWidths :: CircuitInterface -> [(CircuitInterfacePath, BitWidth)]
 getPortOutWidths ifc =
