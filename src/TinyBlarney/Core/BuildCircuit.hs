@@ -6,6 +6,9 @@ module TinyBlarney.Core.BuildCircuit (
   buildCircuitInterface
 , buildCircuitWith
 , buildCircuit
+, customInstanceWithCircuit
+, customInstanceWith
+, customInstance
 ) where
 
 import TinyBlarney.Core.BV
@@ -39,6 +42,21 @@ buildCircuitWith nm ifc f = Circuit { name = nm
 buildCircuit :: (BuildCircuitIfc a, GenCircuit a) => String -> a -> Circuit
 buildCircuit nm f = buildCircuitWith nm (buildCircuitInterface f) f
 
+customInstanceWithCircuit :: GenCircuit a => Circuit -> a
+customInstanceWithCircuit circuit = genWrapper circuit inPaths []
+  where inPaths = getPortInPaths circuit.interface
+
+customInstanceWith :: (BuildCircuitIfc a, GenCircuit a) => String -> a -> a
+customInstanceWith nm f = customInstanceWithCircuit $ buildCircuit nm f
+
+customInstance :: (BuildCircuitIfc a, GenCircuit a) => String -> a
+customInstance nm = f
+  where f = customInstanceWithCircuit c
+        c = Circuit { name = nm
+                    , interface = buildCircuitInterface f
+                    , mNetlist = Nothing
+                    , implementations = mempty }
+
 --------------------------------------------------------------------------------
 -- | Build an interface for a circuit function based on its type signature
 buildCircuitInterface :: BuildCircuitIfc t => t -> CircuitInterface
@@ -62,35 +80,43 @@ instance (Bits a, BuildCircuitIfc t) => BuildCircuitIfc (a -> t) where
 
 getCircuitRoots :: GenCircuit a => a -> CircuitInterface -> [BV]
 getCircuitRoots f ifc = res.roots
-  where res = genCircuit dfltAcc inPathAndBVs outPaths f
+  where res = genToCircuit dfltAcc inPathAndBVs outPaths f
         inBVs = mkInterfaceBV (flipCircuitInterface ifc) res.outs
         inPathAndBVs = zip (getPortInPaths ifc) inBVs
         outPaths = getPortOutPaths ifc
-        dfltAcc = GenCircuitAcc { outs = [], roots = [] }
+        dfltAcc = ToCircuitAcc { outs = [], roots = [] }
 
 -- backing recursive class implementation
 
-data GenCircuitAcc = GenCircuitAcc { outs  :: [PathAndBV]
-                                   , roots :: [BV] } deriving Show
+data ToCircuitAcc = ToCircuitAcc { outs  :: [PathAndBV]
+                                 , roots :: [BV] } deriving Show
 
-addOut :: GenCircuitAcc -> CircuitInterfacePath -> BV -> GenCircuitAcc
+addOut :: ToCircuitAcc -> CircuitInterfacePath -> BV -> ToCircuitAcc
 addOut acc path bv = acc { outs = (path, bv) : acc.outs
                          , roots = bv : acc.roots }
 
-addRoot :: GenCircuitAcc -> BV -> GenCircuitAcc
+addRoot :: ToCircuitAcc -> BV -> ToCircuitAcc
 addRoot acc bv = acc { roots = bv : acc.roots }
 
 class GenCircuit t where
-  genCircuit :: GenCircuitAcc -> [PathAndBV] -> [CircuitInterfacePath] -> t
-             -> GenCircuitAcc
+  genToCircuit :: ToCircuitAcc -> [PathAndBV] -> [CircuitInterfacePath] -> t
+               -> ToCircuitAcc
+  genWrapper :: Circuit -> [CircuitInterfacePath] -> [PathAndBV] -> t
 
 instance {-# OVERLAPPABLE #-} (Bits a) => GenCircuit a where
-  genCircuit acc [] outs x =
-    foldl (\a (p, bv) -> addOut a p bv) acc (zip outs (getBVs x))
-  --genCircuit acc [] outs x = addOut acc zip outs (getBVs x)
-  genCircuit acc ins outs x = err $
-    show acc ++ show ins ++ show outs -- ++ show x
+  genToCircuit acc [] outs x =
+    foldl (\a (p, bv) -> addOut a p bv) acc (zip outs (toBVs x))
+  genToCircuit acc ins outs x = err $ show acc ++ show ins ++ show outs
+
+  genWrapper circuit [] rcvBVs = fromBVs $ mkCustomBV circuit (reverse rcvBVs)
 
 instance (Bits a, GenCircuit t) => GenCircuit (a -> t) where
-  genCircuit acc ((_, bv):rest) outPaths f =
-    genCircuit acc rest outPaths (f . unpack $ AsBit bv)
+  genToCircuit acc ((_, bv):rest) outPaths f =
+    genToCircuit acc rest outPaths (f . unpack $ AsBit bv)
+
+  genWrapper circuit ps rcvBVs x =
+    genWrapper circuit morePaths (newRcvBVs ++ rcvBVs)
+    where xBVs = toBVs x
+          n = length xBVs
+          (paths, morePaths) = splitAt n ps
+          newRcvBVs = zip paths xBVs

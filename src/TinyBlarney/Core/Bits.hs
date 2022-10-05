@@ -72,10 +72,15 @@ class Bits a where
     metaNameHint name . getExternalInterface' 0 . from
   getExternalInterface Nothing = getExternalInterface' 0 . from
 
-  -- | Retrieve 'BV's
-  getBVs :: a -> [BV]
-  default getBVs :: GBits a => a -> [BV]
-  getBVs = getBVs' . from
+  -- | Retrieve 'BV's from a type in 'Bits'
+  toBVs :: a -> [BV]
+  default toBVs :: GBits a => a -> [BV]
+  toBVs = toBVs' . from
+
+  -- | Craft a value of type 'a' in 'Bits' from a '[BV]'
+  fromBVs :: [BV] -> a
+  default fromBVs :: GBits a => [BV] -> a
+  fromBVs = to . fromBVs'
 
 class Bits' f where
   type SizeOf' f :: Nat
@@ -84,7 +89,8 @@ class Bits' f where
   unpack' :: Bit (SizeOf' f) -> f p
   -- the Int argument is the field's index in the current level of :*: chain
   getExternalInterface' :: Int -> f p -> CircuitInterface
-  getBVs' :: f p -> [BV]
+  toBVs' :: f p -> [BV]
+  fromBVs' :: [BV] -> f p
 
 instance Bits' U1 where
   type SizeOf' U1 = 0
@@ -92,7 +98,8 @@ instance Bits' U1 where
   pack' _ = bitZeros
   unpack' _ = U1
   getExternalInterface' _ _ = mempty
-  getBVs' _ = []
+  toBVs' _ = []
+  fromBVs' _ = U1
 
 -- No instance for Bits' (f :+: g)
 
@@ -107,7 +114,13 @@ instance (Bits' f, Bits' g) => Bits' (f :*: g) where
           wy = sizeOf' y
   getExternalInterface' n ~(x :*: y) =
     getExternalInterface' n x <> getExternalInterface' (n+1) y
-  getBVs' ~(x :*: y) = getBVs' x ++ getBVs' y
+  toBVs' ~(x :*: y) = toBVs' x ++ toBVs' y
+  fromBVs' bvs = x :*: y
+    where x = fromBVs' xBVs
+          y = fromBVs' yBVs
+          (xBVs, yBVs) = widthSplit wx wy bvs
+          wx = sizeOf' x
+          wy = sizeOf' y
 
 instance (Bits c) => Bits' (K1 i c) where
   type SizeOf' (K1 i c) = SizeOf c
@@ -115,7 +128,8 @@ instance (Bits c) => Bits' (K1 i c) where
   pack' ~(K1 x) = pack x
   unpack' = K1 . unpack
   getExternalInterface' _ ~(K1 x) = getExternalInterface Nothing x
-  getBVs' ~(K1 x) = getBVs x
+  toBVs' ~(K1 x) = toBVs x
+  fromBVs' = K1 . fromBVs
 
 instance (Bits' f, Selector t) => Bits' (M1 S t f) where
   type SizeOf' (M1 S t f) = SizeOf' f
@@ -125,7 +139,8 @@ instance (Bits' f, Selector t) => Bits' (M1 S t f) where
   getExternalInterface' n m@(~(M1 x))
     | null $ selName m = metaNameHint "tpl" $ getExternalInterface' n x
     | otherwise = metaNameHint (selName m) (getExternalInterface' n x)
-  getBVs' ~(M1 x) = getBVs' x
+  toBVs' ~(M1 x) = toBVs' x
+  fromBVs' = M1 . fromBVs'
 
 instance {-# OVERLAPPABLE #-} (Bits' f) => Bits' (M1 i t f) where
   type SizeOf' (M1 i t f) = SizeOf' f
@@ -133,7 +148,8 @@ instance {-# OVERLAPPABLE #-} (Bits' f) => Bits' (M1 i t f) where
   pack' ~(M1 x) = pack' x
   unpack' = M1 . unpack'
   getExternalInterface' n ~(M1 x) = getExternalInterface' n x
-  getBVs' ~(M1 x) = getBVs' x
+  toBVs' ~(M1 x) = toBVs' x
+  fromBVs' = M1 . fromBVs'
 
 -- Standard Bits instances
 
@@ -144,8 +160,28 @@ instance KnownNat n => Bits (Bit n) where
   unpack = id
   getExternalInterface (Just name) _ = metaNameHint name $ Port Out (valueOf @n)
   getExternalInterface Nothing _ = Port Out $ valueOf @n
-  getBVs x = [x.bv]
+  toBVs x = [x.bv]
+  fromBVs [bv] | unsafeBVBitWidth bv == valueOf @n = AsBit bv
+  fromBVs bvs = err $ "malformed input in fromBVs: " ++ show bvs
 
 instance Bits ()
 instance (Bits a, Bits b) => Bits (a, b)
 instance (Bits a, Bits b, Bits c) => Bits (a, b, c)
+
+--------------------------------------------------------------------------------
+-- local helpers
+
+widthList :: [BV] -> BitWidth
+widthList [] = 0
+widthList (bv:bvs) = unsafeBVBitWidth bv + widthList bvs
+
+widthSplit :: BitWidth -> BitWidth -> [BV] -> ([BV], [BV])
+widthSplit ltgt rtgt allBVs = go 0 [] allBVs
+  where go n acc (bv : bvs)
+          | n + unsafeBVBitWidth bv == ltgt && widthList bvs == rtgt =
+            ((reverse $ bv:acc), bvs)
+          | newN <- n + unsafeBVBitWidth bv, newN < ltgt = go newN (bv:acc) bvs
+          | otherwise = err $    "malformed input in widthSplit:"
+                              ++ "\n  ltgt: " ++ show ltgt
+                              ++ "\n  rtgt: " ++ show rtgt
+                              ++ "\n  allBVs: " ++ show allBVs
