@@ -8,9 +8,9 @@ module TinyBlarney.Core.NetPrimitives (
 , prettyNetOutput
 , Net (..)
 , prettyNet
-, NetlistArray
-, Netlist (..)
-, prettyNetlist
+, Netlist
+, CircuitImplementation (..)
+, prettyCircuitImplementation
 , NetPort (..)
 , NetInput
 , prettyNetPort
@@ -102,18 +102,53 @@ prettyNet MkNet{..} = text "net" PP.<> int instanceId <+> sep xs
 instance Show Net where
   show = render . prettyNet
 
--- | A 'NetlistArray' type synonym for 'Array InstanceId Net'.
-type NetlistArray = Array InstanceId Net
--- | A 'Netlist', represented as an 'Array InstanceId Net'.
-newtype Netlist = Netlist { netlistArray :: NetlistArray }
+-- | A 'Netlist' type synonym for 'Array InstanceId Net'.
+type Netlist = Array InstanceId Net
 
--- | Pretty print a 'Netlist'.
-prettyNetlist :: Netlist -> Doc
-prettyNetlist nl = vcat (prettyNet <$> elems nl.netlistArray)
+-- A type to express the backing implementation of a TinyBlarney 'Circuit'
+data CircuitImplementation =
+    Netlist Netlist -- ^ a 'TinyBlarney 'Netlist'
+  | BackendFiles [(Backend, FilePath)] -- ^ a list of files for given backends
 
--- | Show instance for 'Netlist'.
-instance Show Netlist where
-  show = render . prettyNetlist
+-- | Pretty print a 'CircuitImplementation'.
+prettyCircuitImplementation :: CircuitImplementation -> Doc
+prettyCircuitImplementation (Netlist nl) = vcat (prettyNet <$> elems nl)
+prettyCircuitImplementation (BackendFiles []) = text "No backing implementation"
+prettyCircuitImplementation (BackendFiles xs) =
+  vcat [text (show bckEnd) PP.<> colon <+> text fPath | (bckEnd, fPath) <- xs]
+
+-- | Show instance for 'CircuitImplementation'.
+instance Show CircuitImplementation where
+  show = render . prettyCircuitImplementation
+
+-- | A type to identify a TinyBlarney backend
+data Backend =
+    Verilog -- ^ TinyBlarney's verilog backend
+  deriving (Eq, Ord, Show)
+
+-- | A built 'Circuit' with a name and a 'CircuitInterface', and possibly a
+--  'Netlist' or an implementation for a given backend
+data Circuit = Circuit {
+  -- | circuit's name
+  name :: String
+  -- | circuit's interface
+, interface :: CircuitInterface
+  -- | backing implementation of a 'Circuit'
+, backingImplementation :: CircuitImplementation
+}
+
+-- | Pretty-print a 'Circuit'
+prettyCircuit :: Circuit -> Doc
+prettyCircuit circuit =
+  hang (text "Circuit -" <+> text circuit.name) 2 (pIfc $+$ pImpls)
+  where
+    pIfc =
+      text "- interface:" <+> nest 2 (prettyCircuitInterface circuit.interface)
+    pImpls = prettyCircuitImplementation circuit.backingImplementation
+
+-- | 'Show' instance for 'Circuit'
+instance Show Circuit where
+  show = render . prettyCircuit
 
 -- | Available primitive operations.
 data Primitive =
@@ -191,41 +226,6 @@ data Primitive =
     --     constructor be the one with the second described polarity.
     --   )
   | Interface CircuitInterface
-
--- | A built 'Circuit' with a name and a 'CircuitInterface', and possibly a
---  'Netlist' and an implementation for a given backend
-data Circuit = Circuit {
-  -- | circuit's name
-  name :: String
-  -- | circuit's interface
-, interface :: CircuitInterface
-  -- | potential netlist for the circuit
-, mNetlist :: Maybe Netlist
-  -- | potential inplementations for given backends
-, implementations :: M.Map Backend FilePath
-}
-
--- | Pretty-print a 'Circuit'
-prettyCircuit :: Circuit -> Doc
-prettyCircuit circuit =
-  hang (text "Circuit -" <+> text circuit.name) 2 (vcat [pIfc, pNl, pImpls])
-  where
-    pIfc =
-      text "- interface:" <+> nest 2 (prettyCircuitInterface circuit.interface)
-    pNl = case circuit.mNetlist of
-            Just nl -> text "- netlist:" <+> nest 2 (prettyNetlist nl)
-            _ -> empty
-    pImpls = if null circuit.implementations then empty
-             else text $ show circuit.implementations
-
--- | 'Show' instance for 'Circuit'
-instance Show Circuit where
-  show = render . prettyCircuit
-
--- | A type to identify a TinyBlarney backend
-data Backend =
-    Verilog -- ^ TinyBlarney's verilog backend
-  deriving (Eq, Ord, Show)
 
 -- | Pretty print a 'Primitive'.
 prettyPrimitive :: Primitive -> Doc

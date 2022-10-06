@@ -52,7 +52,7 @@ commaSep = sep . punctuate comma
 
 -- | code generation for a Verilog module
 prettyVerilogModule :: Circuit -> Doc
-prettyVerilogModule Circuit{ mNetlist = Just netlist, .. } =
+prettyVerilogModule Circuit{ backingImplementation = Netlist netlist, .. } =
   vcat [headerDoc, nest 2 $ vcat [declDoc, instDoc, alwsDoc], footerDoc]
   where
     -- Module header (module statement and interface ports)
@@ -85,7 +85,7 @@ prettyVerilogModule Circuit{ mNetlist = Just netlist, .. } =
     deriveNames dflt [] = dflt
     deriveNames    _ xs = intercalate "_" $ reverse xs
     -- generate the 'Doc's for the netlist
-    netDocs = genAllNetDocs Env { netlist = (\(Netlist x) -> x) netlist
+    netDocs = genAllNetDocs Env { netlist = netlist
                                 , netnames = netnames }
     declDocs = map (\NetDocs{..} -> decl) netDocs
     instDocs = map (\NetDocs{..} -> inst) netDocs
@@ -105,7 +105,7 @@ data NetDocs = NetDocs { decl :: Doc
 type GenNetDocs = Reader Env
 
 -- | NetDocs generator reader monad environment
-data Env = Env { netlist :: NetlistArray
+data Env = Env { netlist :: Netlist
                , netnames :: M.Map NetOutput String }
 
 genAllNetDocs :: Env -> [NetDocs]

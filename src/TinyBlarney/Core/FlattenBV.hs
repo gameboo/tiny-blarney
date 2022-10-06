@@ -68,7 +68,7 @@ flattenBV_ :: BV -> FlattenBV ()
 flattenBV_ bv = flattenBV bv >> return ()
 
 flattenFromRoots :: [BV] -> Netlist
-flattenFromRoots rootBVs = Netlist $ runSTArray do
+flattenFromRoots rootBVs = runSTArray do
   mnl <- newListArray (0, length nl - 1)
                       [remapNetInstanceId (mapping !) n | n <- nl]
   -- XXX here work on mutable netlist XXX

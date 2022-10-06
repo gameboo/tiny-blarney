@@ -81,7 +81,7 @@ remapNetInstanceId remap net@MkNet{ instanceId = x, inputPorts = y} =
 -- | Derive a map of Net names given a Netlist and a function to process name
 --   hints
 netNames :: (String -> [String] -> String) -> Netlist -> Map NetOutput String
-netNames deriveName Netlist{netlistArray = nl} =
+netNames deriveName nl =
   fromList $ concatMap f (elems nl)
   where f :: Net -> [(NetOutput, String)]
         f n = let ret x = (x, deriveName (render $ prettyNetOutput x) [])
@@ -93,7 +93,7 @@ netNames deriveName Netlist{netlistArray = nl} =
 
 -- | Return the exposed external 'CircuitInterface' of the given 'Circuit'
 externalNetlistInterface :: Netlist -> CircuitInterface
-externalNetlistInterface Netlist{netlistArray = nl} = mconcat (snd <$> ifcs)
+externalNetlistInterface nl = mconcat (snd <$> ifcs)
   where ifcs = sortOn fst [ (nId, metaInstanceId nId $ flipCircuitInterface ifc)
                           | n@MkNet{ instanceId = nId
                                    , primitive = Interface ifc } <- elems nl ]

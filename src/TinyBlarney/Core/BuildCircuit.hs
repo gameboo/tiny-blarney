@@ -33,8 +33,7 @@ err m = error $ "TinyBlarney.Core.BuildCircuit: " ++ m
 buildCircuitWith :: GenCircuit a => String -> CircuitInterface -> a -> Circuit
 buildCircuitWith nm ifc f = Circuit { name = nm
                                     , interface = externalNetlistInterface nl
-                                    , mNetlist = Just nl
-                                    , implementations = mempty }
+                                    , backingImplementation = Netlist nl }
   where nl = flattenFromRoots $ getCircuitRoots f ifc
 
 -- | Build a 'Circuit' from a name and a TinyBlarney circuit function in
@@ -54,8 +53,7 @@ customInstance nm = f
   where f = customInstanceWithCircuit c
         c = Circuit { name = nm
                     , interface = buildCircuitInterface f
-                    , mNetlist = Nothing
-                    , implementations = mempty }
+                    , backingImplementation = BackendFiles [] }
 
 --------------------------------------------------------------------------------
 -- | Build an interface for a circuit function based on its type signature
