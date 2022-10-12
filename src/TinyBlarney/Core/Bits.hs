@@ -77,10 +77,10 @@ class Bits a where
   default toBVs :: GBits a => a -> [BV]
   toBVs = toBVs' . from
 
-  -- | Craft a value of type 'a' in 'Bits' from a '[BV]'
-  fromBVs :: [BV] -> a
-  default fromBVs :: GBits a => [BV] -> a
-  fromBVs = to . fromBVs'
+  -- | Parse a value of type 'a' in 'Bits' from a '[BV]'
+  fromBVs :: [BV] -> (a, [BV])
+  default fromBVs :: GBits a => [BV] -> (a, [BV])
+  fromBVs = (\(x, y) -> (to x, y)) . fromBVs'
 
 class Bits' f where
   type SizeOf' f :: Nat
@@ -90,7 +90,7 @@ class Bits' f where
   -- the Int argument is the field's index in the current level of :*: chain
   getExternalInterface' :: Int -> f p -> CircuitInterface
   toBVs' :: f p -> [BV]
-  fromBVs' :: [BV] -> f p
+  fromBVs' :: [BV] -> (f p, [BV])
 
 instance Bits' U1 where
   type SizeOf' U1 = 0
@@ -99,7 +99,7 @@ instance Bits' U1 where
   unpack' _ = U1
   getExternalInterface' _ _ = mempty
   toBVs' _ = []
-  fromBVs' _ = U1
+  fromBVs' bvs = (U1, bvs)
 
 -- No instance for Bits' (f :+: g)
 
@@ -115,12 +115,9 @@ instance (Bits' f, Bits' g) => Bits' (f :*: g) where
   getExternalInterface' n ~(x :*: y) =
     getExternalInterface' n x <> getExternalInterface' (n+1) y
   toBVs' ~(x :*: y) = toBVs' x ++ toBVs' y
-  fromBVs' bvs = x :*: y
-    where x = fromBVs' xBVs
-          y = fromBVs' yBVs
-          (xBVs, yBVs) = widthSplit wx wy bvs
-          wx = sizeOf' x
-          wy = sizeOf' y
+  fromBVs' bvs = (x :*: y, bvs'')
+    where (x, bvs') = fromBVs' bvs
+          (y, bvs'') = fromBVs' bvs'
 
 instance (Bits c) => Bits' (K1 i c) where
   type SizeOf' (K1 i c) = SizeOf c
@@ -129,7 +126,7 @@ instance (Bits c) => Bits' (K1 i c) where
   unpack' = K1 . unpack
   getExternalInterface' _ ~(K1 x) = getExternalInterface Nothing x
   toBVs' ~(K1 x) = toBVs x
-  fromBVs' = K1 . fromBVs
+  fromBVs' = (\(x, bvs) -> (K1 x, bvs)) . fromBVs
 
 instance (Bits' f, Selector t) => Bits' (M1 S t f) where
   type SizeOf' (M1 S t f) = SizeOf' f
@@ -140,7 +137,7 @@ instance (Bits' f, Selector t) => Bits' (M1 S t f) where
     | null $ selName m = metaNameHint "tpl" $ getExternalInterface' n x
     | otherwise = metaNameHint (selName m) (getExternalInterface' n x)
   toBVs' ~(M1 x) = toBVs' x
-  fromBVs' = M1 . fromBVs'
+  fromBVs' = (\(x, bvs) -> (M1 x, bvs)) . fromBVs'
 
 instance {-# OVERLAPPABLE #-} (Bits' f) => Bits' (M1 i t f) where
   type SizeOf' (M1 i t f) = SizeOf' f
@@ -149,7 +146,7 @@ instance {-# OVERLAPPABLE #-} (Bits' f) => Bits' (M1 i t f) where
   unpack' = M1 . unpack'
   getExternalInterface' n ~(M1 x) = getExternalInterface' n x
   toBVs' ~(M1 x) = toBVs' x
-  fromBVs' = M1 . fromBVs'
+  fromBVs' = (\(x, bvs) -> (M1 x, bvs)) . fromBVs'
 
 -- Standard Bits instances
 
@@ -161,8 +158,7 @@ instance KnownNat n => Bits (Bit n) where
   getExternalInterface (Just name) _ = metaNameHint name $ Port Out (valueOf @n)
   getExternalInterface Nothing _ = Port Out $ valueOf @n
   toBVs x = [x.bv]
-  fromBVs [bv] | unsafeBVBitWidth bv == valueOf @n = AsBit bv
-  fromBVs bvs = err $ "malformed input in fromBVs: " ++ show bvs
+  fromBVs (bv:bvs) | unsafeBVBitWidth bv == valueOf @n = (AsBit bv, bvs)
 
 instance Bits ()
 instance (Bits a, Bits b) => Bits (a, b)

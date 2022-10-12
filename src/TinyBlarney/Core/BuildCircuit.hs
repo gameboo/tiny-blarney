@@ -106,7 +106,9 @@ instance {-# OVERLAPPABLE #-} (Bits a) => GenCircuit a where
     foldl (\a (p, bv) -> addOut a p bv) acc (zip outs (toBVs x))
   genToCircuit acc ins outs x = err $ show acc ++ show ins ++ show outs
 
-  genWrapper circuit [] rcvBVs = fromBVs $ mkCustomBV circuit (reverse rcvBVs)
+  genWrapper circuit [] rcvBVs = if null bvs then x else fail
+    where (x, bvs) = fromBVs $ mkCustomBV circuit (reverse rcvBVs)
+          fail = err $ "leftover bvs in genWrapper call - " ++ show bvs
 
 instance (Bits a, GenCircuit t) => GenCircuit (a -> t) where
   genToCircuit acc ((_, bv):rest) outPaths f =
