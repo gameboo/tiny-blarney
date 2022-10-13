@@ -22,7 +22,7 @@ module TinyBlarney.Core.Bits (
 import TinyBlarney.Core.BV
 import TinyBlarney.Core.Bit
 import TinyBlarney.Core.Misc
-import TinyBlarney.Core.CircuitInterface
+import TinyBlarney.Core.BasicTypes
 
 import GHC.TypeLits
 import GHC.Generics
@@ -163,21 +163,3 @@ instance KnownNat n => Bits (Bit n) where
 instance Bits ()
 instance (Bits a, Bits b) => Bits (a, b)
 instance (Bits a, Bits b, Bits c) => Bits (a, b, c)
-
---------------------------------------------------------------------------------
--- local helpers
-
-widthList :: [BV] -> BitWidth
-widthList [] = 0
-widthList (bv:bvs) = unsafeBVBitWidth bv + widthList bvs
-
-widthSplit :: BitWidth -> BitWidth -> [BV] -> ([BV], [BV])
-widthSplit ltgt rtgt allBVs = go 0 [] allBVs
-  where go n acc (bv : bvs)
-          | n + unsafeBVBitWidth bv == ltgt && widthList bvs == rtgt =
-            ((reverse $ bv:acc), bvs)
-          | newN <- n + unsafeBVBitWidth bv, newN < ltgt = go newN (bv:acc) bvs
-          | otherwise = err $    "malformed input in widthSplit:"
-                              ++ "\n  ltgt: " ++ show ltgt
-                              ++ "\n  rtgt: " ++ show rtgt
-                              ++ "\n  allBVs: " ++ show allBVs

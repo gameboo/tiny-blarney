@@ -62,7 +62,7 @@ prettyVerilogModule Circuit{ backingImplementation = Netlist netlist, .. } =
   where
     -- Module header (module statement and interface ports)
     headerDoc = text "module" <+> text name <+> parens modArgs <> semi
-    ifcPort ctxt@MkCircuitLeafCtxt{..} = case (mInstanceId, ifc) of
+    ifcPort ctxt@CircuitLeafCtxt{..} = case (mInstanceId, ifc) of
       (Just nId, Port pDir w) ->
         (fromMaybe (err errMsg) $ M.lookup (nId, path) netnames, pDir, w)
       (_, _) -> err errMsg

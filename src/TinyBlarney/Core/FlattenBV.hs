@@ -8,7 +8,7 @@ module TinyBlarney.Core.FlattenBV (
 
 import TinyBlarney.Core.BV
 import TinyBlarney.Core.NetHelpers
-import TinyBlarney.Core.NetPrimitives
+import TinyBlarney.Core.BasicTypes
 
 import Data.Foldable
 import qualified Data.Sequence as Seq
@@ -51,7 +51,7 @@ addNet :: Net -> FlattenBV ()
 addNet = tell . Seq.singleton
 
 flattenBV :: BV -> FlattenBV NetPort
-flattenBV MkBV{ primitive = p@(Constant _ _) } = return $ NetPortInlined p []
+flattenBV BV{ primitive = p@(Constant _ _) } = return $ NetPortInlined p []
 flattenBV bv = do
   visited <- getVisited
   when (not $ bv.instanceId `IntSet.member` visited) do
@@ -59,9 +59,9 @@ flattenBV bv = do
     inPorts <- sequence [ do nPort <- flattenBV b
                              return (path, nPort)
                         | (path, b) <- bv.receivedSignals ]
-    addNet MkNet { instanceId = bv.instanceId
-                 , primitive  = bv.primitive
-                 , inputPorts = inPorts }
+    addNet Net { instanceId = bv.instanceId
+               , primitive  = bv.primitive
+               , inputPorts = inPorts }
   return $ NetPort (bv.instanceId, bv.exposedPath)
 
 flattenBV_ :: BV -> FlattenBV ()

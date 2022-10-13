@@ -2,25 +2,37 @@
 {-# LANGUAGE OverloadedRecordDot   #-}
 {-# LANGUAGE DuplicateRecordFields #-}
 
-module TinyBlarney.Core.NetPrimitives (
-  InstanceId
-, NetOutput
-, prettyNetOutput
+{- |
+
+Module      : TinyBlarney.Core.BasicTypes
+Description : TinyBlarney's basic types used in its "core" module
+Stability   : experimental
+
+-}
+
+module TinyBlarney.Core.BasicTypes (
+  module TinyBlarney.Core.CircuitInterface
+  -- * types
+, Primitive (..)
 , Net (..)
-, prettyNet
-, Netlist
-, CircuitImplementation (..)
-, prettyCircuitImplementation
-, NetPort (..)
 , NetInput
-, prettyNetPort
+, NetOutput
+, NetPort (..)
+, Netlist
 , Circuit (..)
+, CircuitImplementation (..)
 , Backend
+  -- * pretty printers
+, prettyPrimitive
+, prettyNet
+, prettyNetInput
+, prettyNetOutput
+, prettyNetPort
 , prettyCircuit
+, prettyCircuitImplementation
+  -- * basic operations
 , getAllCircuits
 , getAllUniqueCircuits
-, Primitive (..)
-, prettyPrimitive
 , primInterface
 , primInputsInfo
 , primInputWidths
@@ -46,7 +58,9 @@ err :: String -> a
 err m = error $ "TinyBlarney.Core.NetPrimitives: " ++ m
 
 --------------------------------------------------------------------------------
+-- Basic types
 
+--------------------------------------------------------------------------------
 -- | A type to identify a 'Net' output. 'NetOutput' is a
 --   '(InstanceId, CircuitInterfacePath)' pair.
 type NetOutput = (InstanceId, CircuitInterfacePath)
@@ -56,6 +70,7 @@ prettyNetOutput :: NetOutput -> Doc
 prettyNetOutput (i, cPath) =
   text "net" PP.<> int i PP.<> prettyCircuitInterfacePath cPath
 
+--------------------------------------------------------------------------------
 -- | A type to represent a 'Net' input.
 data NetPort =
     -- | Constructor wrapping another 'Net''s output.
@@ -74,6 +89,7 @@ prettyNetPort (NetPortInlined p ins) =
 instance Show NetPort where
   show = render . prettyNetPort
 
+--------------------------------------------------------------------------------
 -- | A type to refer to a net input port. 'NetInput' is a
 --   '(CircuitInterfacePath, NetPort)' pair.
 type NetInput = (CircuitInterfacePath, NetPort)
@@ -83,16 +99,16 @@ prettyNetInput :: NetInput -> Doc
 prettyNetInput (cPath, nPort) =
   prettyCircuitInterfacePath cPath <+> text ":=" <+> prettyNetPort nPort
 
+--------------------------------------------------------------------------------
 -- | A type to represent a netlist node.
-data Net =
-  MkNet { instanceId :: InstanceId -- ^ a unique instance identifier
-        , primitive  :: Primitive  -- ^ a primitive operation
-        , inputPorts :: [NetInput]  -- ^ a list of inputs
-        }
+data Net = Net { instanceId :: InstanceId  -- ^ a unique instance identifier
+               , primitive  :: Primitive   -- ^ a primitive operation
+               , inputPorts :: [NetInput]  -- ^ a list of inputs
+               }
 
 -- | Pretty print a 'Net'.
 prettyNet :: Net -> Doc
-prettyNet MkNet{..} = text "net" PP.<> int instanceId <+> sep xs
+prettyNet Net{..} = text "net" PP.<> int instanceId <+> sep xs
   where
     xs = [ primPretty primitive
          , case inputPorts of
@@ -105,9 +121,11 @@ prettyNet MkNet{..} = text "net" PP.<> int instanceId <+> sep xs
 instance Show Net where
   show = render . prettyNet
 
+--------------------------------------------------------------------------------
 -- | A 'Netlist' type synonym for 'Array InstanceId Net'.
 type Netlist = Array InstanceId Net
 
+--------------------------------------------------------------------------------
 -- A type to express the backing implementation of a TinyBlarney 'Circuit'
 data CircuitImplementation =
     Netlist Netlist -- ^ a 'TinyBlarney 'Netlist'
@@ -120,25 +138,26 @@ prettyCircuitImplementation (BackendFiles []) = text "No backing implementation"
 prettyCircuitImplementation (BackendFiles xs) =
   vcat [text (show bckEnd) PP.<> colon <+> text fPath | (bckEnd, fPath) <- xs]
 
+--------------------------------------------------------------------------------
 -- | Show instance for 'CircuitImplementation'.
 instance Show CircuitImplementation where
   show = render . prettyCircuitImplementation
 
+--------------------------------------------------------------------------------
 -- | A type to identify a TinyBlarney backend
-data Backend =
-    Verilog -- ^ TinyBlarney's verilog backend
+data Backend = Verilog -- ^ TinyBlarney's verilog backend
   deriving (Eq, Ord, Show)
 
+--------------------------------------------------------------------------------
 -- | A built 'Circuit' with a name and a 'CircuitInterface', and possibly a
 --  'Netlist' or an implementation for a given backend
-data Circuit = Circuit {
-  -- | circuit's name
-  name :: String
-  -- | circuit's interface
-, interface :: CircuitInterface
-  -- | backing implementation of a 'Circuit'
-, backingImplementation :: CircuitImplementation
-}
+data Circuit = Circuit { -- | circuit's name
+                         name :: String
+                         -- | circuit's interface
+                       , interface :: CircuitInterface
+                         -- | backing implementation of a 'Circuit'
+                       , backingImplementation :: CircuitImplementation
+                       }
 
 -- | Pretty-print a 'Circuit'
 prettyCircuit :: Circuit -> Doc
@@ -156,7 +175,7 @@ instance Show Circuit where
 -- | Retreive all available 'Circuit's in a 'Circuit'
 getAllCircuits :: Circuit -> [Circuit]
 getAllCircuits c@Circuit{ backingImplementation = Netlist nl } =
-  c : concat [ getAllCircuits c' | MkNet {primitive = Custom c'} <- elems nl ]
+  c : concat [ getAllCircuits c' | Net {primitive = Custom c'} <- elems nl ]
 getAllCircuits c = [c]
 
 -- | Retreive all available 'Circuit's in a 'Circuit'
@@ -166,6 +185,7 @@ getAllUniqueCircuits c = uniq cs
         sameName c0 c1 = c0.name == c1.name
         cs = getAllCircuits c
 
+--------------------------------------------------------------------------------
 -- | Available primitive operations.
 data Primitive =
 
@@ -252,7 +272,7 @@ instance Show Primitive where
   show = render . primPretty
 
 -- | General information on a primitive.
-data PrimitiveInfo = MkPrimitiveInfo {
+data PrimitiveInfo = PrimitiveInfo {
   -- | The circuit interface of the primitive (its inputs and outputs...).
   interface :: CircuitInterface
   -- | The pretty printing 'Doc' for the primitive.
@@ -314,44 +334,44 @@ pDoc d ifc =
 
 -- | document 'PrimitiveInfo' for any 'Primitive'
 primInfo :: Primitive -> PrimitiveInfo
-primInfo (Constant k w) = MkPrimitiveInfo {
+primInfo (Constant k w) = PrimitiveInfo {
   interface = ifc
 , prettyDoc = pDoc (text "Constant " <+> integer k) ifc
 } where ifc = metaNameHint "out" $ Port Out w
-primInfo (DontCare w) = MkPrimitiveInfo {
+primInfo (DontCare w) = PrimitiveInfo {
   interface = ifc
 , prettyDoc = pDoc (text "DontCare") ifc
 } where ifc = metaNameHint "out" $ Port Out w
-primInfo (And w) = MkPrimitiveInfo {
+primInfo (And w) = PrimitiveInfo {
   interface = ifc
 , prettyDoc = pDoc (text "And") ifc
 } where ifc = ifcBinaryOp w w w
-primInfo (Or w) = MkPrimitiveInfo {
+primInfo (Or w) = PrimitiveInfo {
   interface = ifc
 , prettyDoc = pDoc (text "Or") ifc
 } where ifc = ifcBinaryOp w w w
-primInfo (Xor w) = MkPrimitiveInfo {
+primInfo (Xor w) = PrimitiveInfo {
   interface = ifc
 , prettyDoc = pDoc (text "Xor") ifc
 } where ifc = ifcBinaryOp w w w
-primInfo (Invert w) = MkPrimitiveInfo {
+primInfo (Invert w) = PrimitiveInfo {
   interface = ifc
 , prettyDoc = pDoc (text "Invert") ifc
 } where ifc = ifcUnaryOp w w
-primInfo (Concatenate w0 w1) = MkPrimitiveInfo {
+primInfo (Concatenate w0 w1) = PrimitiveInfo {
   interface = ifc
 , prettyDoc = pDoc (text "Concatenate") ifc
 } where ifc = ifcBinaryOp w0 w1 (w0+w1)
-primInfo (Slice (hi, lo) w) = MkPrimitiveInfo {
+primInfo (Slice (hi, lo) w) = PrimitiveInfo {
   interface = ifc
 , prettyDoc =
     pDoc (text "Slice" PP.<> parens (int hi PP.<> comma <+> int lo)) ifc
 } where ifc = ifcUnaryOp w (hi-lo+1)
-primInfo (Custom circuit) = MkPrimitiveInfo {
+primInfo (Custom circuit) = PrimitiveInfo {
   interface = circuit.interface
 , prettyDoc = text "Prim Custom: " <+> prettyCircuit circuit
 }
-primInfo (Interface ifc) = MkPrimitiveInfo {
+primInfo (Interface ifc) = PrimitiveInfo {
   interface = ifc
 , prettyDoc = pDoc (text "Interface") ifc
 }

@@ -16,8 +16,7 @@ module TinyBlarney.Core.NetHelpers (
 , externalNetlistInterface
 ) where
 
-import TinyBlarney.Core.NetPrimitives
-import TinyBlarney.Core.CircuitInterface
+import TinyBlarney.Core.BasicTypes
 
 import Data.Map hiding (elems)
 import Data.List
@@ -71,7 +70,7 @@ remapNetInputInstanceId f (p, np) = (p, remapNetPortInstanceId f np)
 
 -- | Helper function remap the 'InstanceId's of a 'Net'
 remapNetInstanceId :: (InstanceId -> InstanceId) -> Net -> Net
-remapNetInstanceId remap net@MkNet{ instanceId = x, inputPorts = y} =
+remapNetInstanceId remap net@Net{ instanceId = x, inputPorts = y} =
   net { instanceId = remap x
       , inputPorts = remapNetInputInstanceId remap <$> y }
 
@@ -95,5 +94,5 @@ netNames deriveName nl =
 externalNetlistInterface :: Netlist -> CircuitInterface
 externalNetlistInterface nl = mconcat (snd <$> ifcs)
   where ifcs = sortOn fst [ (nId, metaInstanceId nId $ flipCircuitInterface ifc)
-                          | n@MkNet{ instanceId = nId
-                                   , primitive = Interface ifc } <- elems nl ]
+                          | n@Net{ instanceId = nId
+                                 , primitive = Interface ifc } <- elems nl ]

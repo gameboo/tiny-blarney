@@ -23,8 +23,7 @@ module TinyBlarney.Core.BV (
 , mkInterfaceBV
 ) where
 
-import TinyBlarney.Core.NetPrimitives
-import TinyBlarney.Core.CircuitInterface
+import TinyBlarney.Core.BasicTypes
 
 import Data.Maybe
 import Prelude hiding ((<>))
@@ -49,14 +48,14 @@ err m = error $ "TinyBlarney.Core.BV: " ++ m
 -- instance, and the PortName should identify a unique output port in this
 -- PrimitiveCircuitDescription)
 
-data BV = MkBV { instanceId :: InstanceId
-               , primitive :: Primitive
-               , receivedSignals :: [PathAndBV]
-               , exposedPath :: CircuitInterfacePath }
+data BV = BV { instanceId :: InstanceId
+             , primitive :: Primitive
+             , receivedSignals :: [PathAndBV]
+             , exposedPath :: CircuitInterfacePath }
 
 -- | Pretty print a 'BV'.
 prettyBV :: BV -> Doc
-prettyBV MkBV{..} =
+prettyBV BV{..} =
   text "bv" <> int instanceId <> prettyCircuitInterfacePath exposedPath
             <+> sep xs
   where
@@ -95,10 +94,10 @@ mkPrimitive prim rcvSigs = case getPortOutPaths . primInterface $ prim of
   [] -> [bv]
   paths -> [ bv { exposedPath = path } | path <- paths ]
   where -- | model BV
-        bv = MkBV { instanceId = iId
-                  , primitive = prim
-                  , receivedSignals = rcvSigs
-                  , exposedPath = mempty }
+        bv = BV { instanceId = iId
+                , primitive = prim
+                , receivedSignals = rcvSigs
+                , exposedPath = mempty }
         -- | For Observable Sharing.
         iId = unsafePerformIO $ atomicModifyIORef' instanceIdCnt \x -> (x+1, x)
 

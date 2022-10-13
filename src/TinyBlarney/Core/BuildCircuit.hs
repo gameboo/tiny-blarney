@@ -16,8 +16,7 @@ import TinyBlarney.Core.Bit
 import TinyBlarney.Core.Bits
 import TinyBlarney.Core.FlattenBV
 import TinyBlarney.Core.NetHelpers
-import TinyBlarney.Core.NetPrimitives
-import TinyBlarney.Core.CircuitInterface
+import TinyBlarney.Core.BasicTypes
 
 import GHC.TypeLits
 import Text.PrettyPrint hiding ((<>))
