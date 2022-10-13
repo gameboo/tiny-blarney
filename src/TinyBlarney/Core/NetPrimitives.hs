@@ -17,6 +17,8 @@ module TinyBlarney.Core.NetPrimitives (
 , Circuit (..)
 , Backend
 , prettyCircuit
+, getAllCircuits
+, getAllUniqueCircuits
 , Primitive (..)
 , prettyPrimitive
 , primInterface
@@ -31,6 +33,7 @@ module TinyBlarney.Core.NetPrimitives (
 , ifcBinaryOp
 ) where
 
+import Data.List
 import Data.Array
 import qualified Data.Map as M
 import Text.PrettyPrint hiding ((<>))
@@ -149,6 +152,19 @@ prettyCircuit circuit =
 -- | 'Show' instance for 'Circuit'
 instance Show Circuit where
   show = render . prettyCircuit
+
+-- | Retreive all available 'Circuit's in a 'Circuit'
+getAllCircuits :: Circuit -> [Circuit]
+getAllCircuits c@Circuit{ backingImplementation = Netlist nl } =
+  c : concat [ getAllCircuits c' | MkNet {primitive = Custom c'} <- elems nl ]
+getAllCircuits c = [c]
+
+-- | Retreive all available 'Circuit's in a 'Circuit'
+getAllUniqueCircuits :: Circuit -> [Circuit]
+getAllUniqueCircuits c = uniq cs
+  where uniq = fmap head . groupBy sameName . sortOn name
+        sameName c0 c1 = c0.name == c1.name
+        cs = getAllCircuits c
 
 -- | Available primitive operations.
 data Primitive =

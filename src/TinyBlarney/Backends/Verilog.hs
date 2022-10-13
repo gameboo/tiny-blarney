@@ -13,7 +13,8 @@ This backend generates verilog for a given TinyBlarney 'Circuit'.
 -}
 
 module TinyBlarney.Backends.Verilog (
-  writeVerilogModule
+  genVerilog
+, writeVerilogModule
 ) where
 
 import TinyBlarney.Core
@@ -35,6 +36,10 @@ err m = error $ "TinyBlarney.Backends.Verilog: " ++ m
 
 -- exported API
 --------------------------------------------------------------------------------
+-- | Generate Verilog code for a 'Circuit'
+genVerilog :: Circuit -> [String]
+genVerilog = (render . prettyVerilogModule <$>) . getAllUniqueCircuits
+
 -- | Generate Verilog code for a 'Circuit'
 writeVerilogModule :: Circuit -> String
 writeVerilogModule c = render $ prettyVerilogModule c

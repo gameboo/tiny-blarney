@@ -1,9 +1,12 @@
 {-# LANGUAGE DataKinds      #-}
 {-# LANGUAGE DeriveGeneric  #-}
+{-# LANGUAGE BlockArguments #-}
 {-# LANGUAGE DeriveAnyClass #-}
 
 import TinyBlarney
+
 import GHC.Generics
+import Control.Monad
 
 halfAdder :: Bit 1 -> Bit 1 -> (Bit 1, Bit 1)
 halfAdder x y = (sum, carry)
@@ -47,6 +50,6 @@ main:: IO ()
 main = do
   putStrLn $ show c
   putStrLn "--------------------------------------------------"
-  putStrLn v
-  where c = buildCircuit "carryChainAdder" $ carryChainAdder @128
-        v = writeVerilogModule c
+  forM_ vs \v -> putStrLn v
+  where c = buildCircuit "carryChainAdder" $ carryChainAdder @4
+        vs = genVerilog c
