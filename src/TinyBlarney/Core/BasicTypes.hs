@@ -21,7 +21,7 @@ module TinyBlarney.Core.BasicTypes (
 , Netlist
 , Circuit (..)
 , CircuitImplementation (..)
-, Backend
+, Backend (..)
   -- * pretty printers
 , prettyPrimitive
 , prettyNet
@@ -31,6 +31,8 @@ module TinyBlarney.Core.BasicTypes (
 , prettyCircuit
 , prettyCircuitImplementation
   -- * basic operations
+, getChildrenCircuits
+, getUniqueChildrenCircuits
 , getAllCircuits
 , getAllUniqueCircuits
 , primInterface
@@ -172,13 +174,26 @@ prettyCircuit circuit =
 instance Show Circuit where
   show = render . prettyCircuit
 
--- | Retreive all available 'Circuit's in a 'Circuit'
+-- | Retreive children 'Circuit's
+getChildrenCircuits :: Circuit -> [Circuit]
+getChildrenCircuits c@Circuit{ backingImplementation = Netlist nl } =
+  [ c' | Net {primitive = Custom c'} <- elems nl ]
+getChildrenCircuits _ = []
+
+-- | Retreive children 'Circuit's removing duplicates
+getUniqueChildrenCircuits :: Circuit -> [Circuit]
+getUniqueChildrenCircuits c = uniq cs
+  where uniq = fmap head . groupBy sameName . sortOn name
+        sameName c0 c1 = c0.name == c1.name
+        cs = getChildrenCircuits c
+
+-- | Retreive all available nested 'Circuit's in a 'Circuit'
 getAllCircuits :: Circuit -> [Circuit]
 getAllCircuits c@Circuit{ backingImplementation = Netlist nl } =
   c : concat [ getAllCircuits c' | Net {primitive = Custom c'} <- elems nl ]
 getAllCircuits c = [c]
 
--- | Retreive all available 'Circuit's in a 'Circuit'
+-- | Retreive all available nested 'Circuit's in a 'Circuit' removing duplicates
 getAllUniqueCircuits :: Circuit -> [Circuit]
 getAllUniqueCircuits c = uniq cs
   where uniq = fmap head . groupBy sameName . sortOn name

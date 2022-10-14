@@ -7,16 +7,19 @@ Stability   : experimental
 -}
 
 module TinyBlarney.Backends.Simulation.Haskell (
-  simulateWithHaskell
+  buildSimulatorWithHaskell
 ) where
 
 import TinyBlarney.Core
+import TinyBlarney.Backends.Simulation.SimulatorTypes
+
+import Data.Map
 
 -- | local error helper function
 err :: String -> a
 err m = error $ "TinyBlarney.Backends.Simulation.Haskell: " ++ m
 
--- | Simulate a 'Circuit' using in haskell interpretation of the 'Circuit''s
+-- | Build a 'Simulator' using in haskell interpretation of the 'Circuit''s
 --   netlist
-simulateWithHaskell :: Circuit -> IO ()
-simulateWithHaskell = err $ "Not implemented yet"
+buildSimulatorWithHaskell :: Map String Simulator -> Circuit -> Simulator
+buildSimulatorWithHaskell = err $ "Not implemented yet"

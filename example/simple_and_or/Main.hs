@@ -14,5 +14,10 @@ main = do
   putStrLn "generate verilog"
   putStrLn "----"
   putStrLn v
+  putStrLn "----"
+  putStrLn "build simulator"
+  putStrLn "----"
+  sim `seq` putStrLn "plop"
   where c = buildCircuit "myMkAndABOrC" $ mkAndABOrC @8
         v = head $ generateVerilog c
+        sim = buildSimulator c
