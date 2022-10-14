@@ -52,4 +52,4 @@ main = do
   putStrLn "--------------------------------------------------"
   forM_ vs \v -> putStrLn v
   where c = buildCircuit "carryChainAdder" $ carryChainAdder @4
-        vs = genVerilog c
+        vs = generateVerilog c

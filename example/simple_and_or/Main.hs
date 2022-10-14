@@ -15,4 +15,4 @@ main = do
   putStrLn "----"
   putStrLn v
   where c = buildCircuit "myMkAndABOrC" $ mkAndABOrC @8
-        v = writeVerilogModule c
+        v = head $ generateVerilog c

@@ -4,17 +4,16 @@
 
 {- |
 
-Module      : TinyBlarney.Backends.Verilog
-Description : TinyBlarney's verilog backend
+Module      : TinyBlarney.Backends.CodeGeneration.Verilog
+Description : TinyBlarney's verilog code generation backend
 Stability   : experimental
 
 This backend generates verilog for a given TinyBlarney 'Circuit'.
 
 -}
 
-module TinyBlarney.Backends.Verilog (
-  genVerilog
-, writeVerilogModule
+module TinyBlarney.Backends.CodeGeneration.Verilog (
+  generateVerilog
 ) where
 
 import TinyBlarney.Core
@@ -32,17 +31,13 @@ import Text.PrettyPrint
 
 -- | local error helper function
 err :: String -> a
-err m = error $ "TinyBlarney.Backends.Verilog: " ++ m
+err m = error $ "TinyBlarney.Backends.CodeGeneration.Verilog: " ++ m
 
 -- exported API
 --------------------------------------------------------------------------------
 -- | Generate Verilog code for a 'Circuit'
-genVerilog :: Circuit -> [String]
-genVerilog = (render . prettyVerilogModule <$>) . getAllUniqueCircuits
-
--- | Generate Verilog code for a 'Circuit'
-writeVerilogModule :: Circuit -> String
-writeVerilogModule c = render $ prettyVerilogModule c
+generateVerilog :: Circuit -> [String]
+generateVerilog = (render . prettyVerilogModule <$>) . getAllUniqueCircuits
 
 -- Internal helpers
 --------------------------------------------------------------------------------
