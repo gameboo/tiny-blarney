@@ -134,12 +134,10 @@ genNetDeclDoc n = case n.primitive of
   (Slice _ w) -> genIdentDecl Wire NoInitVal w nOut
   (Custom c) ->
     sep <$> mapM (\(p, w) -> genIdentDecl Wire NoInitVal w (nId, p)) nOutsInfo
-  (Interface _) -> sep <$> mapM genIfcPortDecl nOutsInfo
-  --_ -> return empty
+  _ -> return empty
   where nId = n.instanceId
         nOut = netOutput n
         nOutsInfo = netOutputsInfo n
-        genIfcPortDecl (p, w) = genIdentDecl Wire NoInitVal w (nId, p)
 
 
 -- | Code generation for Verilog instantiations
