@@ -17,7 +17,7 @@ main = do
   putStrLn "----"
   putStrLn "build simulator"
   putStrLn "----"
-  sim `seq` putStrLn "plop"
+  sim <- buildSimulatorWith (Just Verilog) c
+  putStrLn "simulator built"
   where c = buildCircuit "myMkAndABOrC" $ mkAndABOrC @8
-        v = head $ generateVerilog c
-        sim = buildSimulator c
+        v = generateTopVerilog c
