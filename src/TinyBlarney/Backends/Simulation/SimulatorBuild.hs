@@ -26,14 +26,23 @@ err m = error $ "TinyBlarney.Backends.Simulation.SimulatorBuild: " ++ m
 -- | Build a 'Simulator' from a 'Circuit'.
 --   The simulation engine to use is selected based on the available backing
 --   implementations for the 'Circuit' and a user provided preference
-buildSimulatorWith :: Maybe Backend -> Circuit -> Simulator
+buildSimulatorWith :: Maybe Backend -> Circuit -> IO Simulator
 buildSimulatorWith pref c = case (c.backingImplementation, pref) of
   -- Verilator engine
   (BackendFiles xs, Just Verilog)
-    | Verilog `elem` fmap fst xs -> buildSimulatorWithVerilator c
-  (Netlist nl, Just Verilog) -> buildSimulatorWithVerilator c
+    | Verilog `elem` fmap fst xs -> do
+    putStrLn $ "Generating a simulator using verilator simulation backend"
+    buildSimulatorWithVerilator c
+  (Netlist nl, Just Verilog) -> do
+    putStrLn $ "Generating a simulator using verilator simulation backend"
+    buildSimulatorWithVerilator c
   -- Haskell engine
-  (Netlist nl, _) -> buildSimulatorWithHaskell simMap c
+  (Netlist nl, _) -> do
+    putStrLn $ "Generating a simulator using in-haskell simulation backend"
+    simMap <- fromList <$> sequence [ do sim <- buildSimulatorWith pref c'
+                                         return (c'.name, sim)
+                                    | c' <- getUniqueChildrenCircuits c ]
+    buildSimulatorWithHaskell simMap c
   -- fall-through case: error
   _ -> err $ "No supported simulation strategy"
   -- recursive build of children simulators
@@ -43,6 +52,5 @@ buildSimulatorWith pref c = case (c.backingImplementation, pref) of
 
 -- | Build a 'Simulator' from a 'Circuit'.
 --   The prefered simulation engine defaults to Haskell
-buildSimulator :: Circuit -> Simulator
+buildSimulator :: Circuit -> IO Simulator
 buildSimulator = buildSimulatorWith Nothing
-
