@@ -14,6 +14,7 @@ This backend generates verilog for a given TinyBlarney 'Circuit'.
 
 module TinyBlarney.Backends.CodeGeneration.Verilog (
   generateVerilog
+, generateTopVerilog
 ) where
 
 import TinyBlarney.Core
@@ -35,9 +36,15 @@ err m = error $ "TinyBlarney.Backends.CodeGeneration.Verilog: " ++ m
 
 -- exported API
 --------------------------------------------------------------------------------
--- | Generate Verilog code for a 'Circuit'
-generateVerilog :: Circuit -> [String]
-generateVerilog = (render . prettyVerilogModule <$>) . getAllUniqueCircuits
+
+-- | Generate all Verilog code for a 'Circuit'
+generateVerilog :: Circuit -> M.Map String String
+generateVerilog c = M.fromList [ (c'.name, render . prettyVerilogModule $ c')
+                               | c' <- getAllUniqueCircuits c ]
+
+-- | Generate Verilog code for the top entity of a 'Circuit'
+generateTopVerilog :: Circuit -> String
+generateTopVerilog = render . prettyVerilogModule
 
 -- Internal helpers
 --------------------------------------------------------------------------------
