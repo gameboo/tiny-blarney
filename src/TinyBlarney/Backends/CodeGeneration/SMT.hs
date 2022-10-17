@@ -14,10 +14,12 @@ module TinyBlarney.Backends.CodeGeneration.SMT (
 
 import TinyBlarney.Core
 
+import Data.Map
+
 -- | local error helper function
 err :: String -> a
 err m = error $ "TinyBlarney.Backends.CodeGeneration.SMT: " ++ m
 
 -- | Generate SMT code for a 'Circuit''s assertions
-generateSMT :: Circuit -> [String]
+generateSMT :: Circuit -> Map String String
 generateSMT = err $ "Not implemented yet"
