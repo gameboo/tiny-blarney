@@ -17,6 +17,7 @@ module TinyBlarney.Backends.PrettyHelpers.C (
 , cWhile
 , cDoWhile
 , cSwitch
+, cIf
 , cDef
 , cFunDef
 , cDelete
@@ -91,6 +92,26 @@ cSwitch testE cases dflt = text "switch" <+> parens testE <+> braces (vcat alts)
                                      , nest 2 $ vcat stmts ]
         dfltCase _ = empty
         alts = (alt <$> cases) ++ [dfltCase dflt]
+
+cIf :: [(CExpr, [CStmt])] -> Maybe [CStmt] -> CStmt
+cIf alts fallThrough
+  | length alts > 0 = cIf1 alts fallThrough
+  | otherwise = cElse NoWrapElse fallThrough
+
+cIf1 :: [(CExpr, [CStmt])] -> Maybe [CStmt] -> CStmt
+cIf1 ((testE, stmts):[]) fThrough = text "if" <+> parens testE
+                                              <+> braces (vcat stmts)
+                                              <+> cElse WrapElse fThrough
+cIf1 ((testE, stmts):alts) fThrough = text "if" <+> parens testE
+                                                <+> braces (vcat stmts)
+                                                <+> text "else"
+                                                <+> cIf1 alts fThrough
+
+data WrapElse = WrapElse | NoWrapElse
+cElse :: WrapElse -> Maybe [CStmt] -> CStmt
+cElse WrapElse (Just stmts) = text "else" <+> braces (vcat stmts)
+cElse NoWrapElse (Just stmts) = vcat stmts
+cElse _ _ = empty
 
 cDef :: CTypedIdent -> Maybe CExpr -> CStmt
 cDef (cType, cIdent) (Just initExpr) =
