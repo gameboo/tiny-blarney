@@ -79,7 +79,7 @@ prettyVerilogModule Circuit{ backingImplementation = Netlist netlist, .. } =
     -- triggered always_ff blocks
     alwsDoc = sep alwsDocs -- TODO reset block
     -- module footer
-    footerDoc = text "emdmodule"
+    footerDoc = text "endmodule"
     -- generate names for the nets of the netlist
     netnames = netNames deriveNames netlist
     deriveNames dflt [] = dflt
