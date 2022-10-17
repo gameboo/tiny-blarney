@@ -88,9 +88,7 @@ prettyVerilogModule Circuit{ backingImplementation = Netlist netlist, .. } =
     -- module footer
     footerDoc = text "endmodule"
     -- generate names for the nets of the netlist
-    netnames = netNames deriveNames netlist
-    deriveNames dflt [] = dflt
-    deriveNames    _ xs = intercalate "_" $ reverse xs
+    netnames = netNames netlist
     -- generate the 'Doc's for the netlist
     netDocs = genAllNetDocs Env { netlist = netlist
                                 , netnames = netnames }

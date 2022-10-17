@@ -12,6 +12,7 @@ module TinyBlarney.Core.NetHelpers (
 , remapNetPortInstanceId
 , remapNetInputInstanceId
 , remapNetInstanceId
+, netNamesWith
 , netNames
 , externalNetlistInterface
 ) where
@@ -79,8 +80,9 @@ remapNetInstanceId remap net@Net{ instanceId = x, inputPorts = y} =
 
 -- | Derive a map of Net names given a Netlist and a function to process name
 --   hints
-netNames :: (String -> [String] -> String) -> Netlist -> Map NetOutput String
-netNames deriveName nl =
+netNamesWith :: (String -> [String] -> String) -> Netlist
+             -> Map NetOutput String
+netNamesWith deriveName nl =
   fromList $ concatMap f (elems nl)
   where f :: Net -> [(NetOutput, String)]
         f n = let ret x = (x, deriveName (render $ prettyNetOutput x) [])
@@ -89,6 +91,13 @@ netNames deriveName nl =
                                    , case n.primitive of Interface _ -> True
                                                          _ -> False ]
               in ins ++ outs
+
+-- | Derive a map of Net names given a Netlist
+netNames :: Netlist -> Map NetOutput String
+netNames = netNamesWith dfltDerive
+  where dfltDerive :: String -> [String] -> String
+        dfltDerive dflt [] = dflt
+        dfltDerive _ xs = intercalate "_" $ reverse xs
 
 -- | Return the exposed external 'CircuitInterface' of the given 'Circuit'
 externalNetlistInterface :: Netlist -> CircuitInterface
