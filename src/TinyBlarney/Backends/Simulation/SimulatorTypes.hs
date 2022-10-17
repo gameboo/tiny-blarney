@@ -16,6 +16,8 @@ module TinyBlarney.Backends.Simulation.SimulatorTypes (
 
 import Data.Map
 
+import TinyBlarney.Core
+
 -- | A type representing a number of timesteps in a simulation
 type SimTime = Int
 
@@ -26,12 +28,12 @@ type Sample = (SimTime, Int)
 type Signal = [Sample]
 
 -- | A dictionary of named 'Signal's
-type SignalMap = Map String Signal
+type SignalMap = Map CircuitInterfacePath Signal
 
 -- | A 'Simulator''s interface
 data SimulatorIfc = SimulatorIfc {
   --effects :: [(SimTime, IO ())] -- ^ Stream of effects
-  outputs :: SignalMap          -- ^ dictionary of output signals
+  outputs :: SignalMap            -- ^ dictionary of output signals
 }
 
 -- | A type defining the interface to a simulator
