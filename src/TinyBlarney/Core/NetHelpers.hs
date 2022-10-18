@@ -85,12 +85,14 @@ remapNetInstanceId f net@Net{ instanceId = x, inputConnections = y} =
 
 -- | Derive a map of Net names given a Netlist and a function to process name
 --   hints
-netNamesWith :: (String -> [String] -> String) -> Netlist
+netNamesWith :: ([String] -> Maybe String) -> Netlist
              -> Map NetPort String
 netNamesWith deriveName nl =
   fromList $ concatMap f (elems nl)
   where f :: Net -> [(NetPort, String)]
-        f n = let ret x = (x, deriveName (render $ prettyNetPort x) [])
+        f n = let ret x = (x, (render $ prettyNetPort x) ++ suffix)
+                  suffix = case deriveName [] of Just s -> "_" ++ s
+                                                 _ -> ""
                   outs = [ ret nOut | nOut <- netOutputs n ]
                   ins = [ ret nIns | nIns <- netInputs n
                                    , case n.primitive of Interface _ -> True
@@ -100,9 +102,9 @@ netNamesWith deriveName nl =
 -- | Derive a map of Net names given a Netlist
 netNames :: Netlist -> Map NetOutput String
 netNames = netNamesWith dfltDerive
-  where dfltDerive :: String -> [String] -> String
-        dfltDerive dflt [] = dflt
-        dfltDerive _ xs = intercalate "_" $ reverse xs
+  where dfltDerive :: [String] -> Maybe String
+        dfltDerive [] = Nothing
+        dfltDerive xs = Just (intercalate "_" $ reverse xs)
 
 -- | Return the exposed external 'CircuitInterface' of the given 'Circuit'
 externalNetlistInterface :: Netlist -> CircuitInterface
