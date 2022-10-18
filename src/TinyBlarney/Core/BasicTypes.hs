@@ -15,9 +15,11 @@ module TinyBlarney.Core.BasicTypes (
   -- * types
 , Primitive (..)
 , Net (..)
+, NetPort
 , NetInput
 , NetOutput
-, NetPort (..)
+, NetConnection (..)
+, NetInputConnection
 , Netlist
 , Circuit (..)
 , CircuitImplementation (..)
@@ -25,9 +27,11 @@ module TinyBlarney.Core.BasicTypes (
   -- * pretty printers
 , prettyPrimitive
 , prettyNet
+, prettyNetPort
 , prettyNetInput
 , prettyNetOutput
-, prettyNetPort
+, prettyNetConnection
+, prettyNetInputConnection
 , prettyCircuit
 , prettyCircuitImplementation
   -- * basic operations
@@ -63,49 +67,64 @@ err m = error $ "TinyBlarney.Core.NetPrimitives: " ++ m
 -- Basic types
 
 --------------------------------------------------------------------------------
--- | A type to identify a 'Net' output. 'NetOutput' is a
+-- | A type to identify a 'Net' port. 'NetPort' is a
 --   '(InstanceId, CircuitInterfacePath)' pair.
-type NetOutput = (InstanceId, CircuitInterfacePath)
-
--- | Pretty print a 'NetOutput'.
-prettyNetOutput :: NetOutput -> Doc
-prettyNetOutput (i, cPath) =
-  text "net" PP.<> int i PP.<> prettyCircuitInterfacePath cPath
-
---------------------------------------------------------------------------------
--- | A type to represent a 'Net' input.
-data NetPort =
-    -- | Constructor wrapping another 'Net''s output.
-    NetPort NetOutput
-    -- | Constructor inlining a 'Primitive' operation and a '[NetPort]' list of
-    --   its inputs.
-  | NetPortInlined Primitive [NetPort]
+type NetPort = (InstanceId, CircuitInterfacePath)
+type NetInput = NetPort
+type NetOutput = NetPort
 
 -- | Pretty print a 'NetPort'.
 prettyNetPort :: NetPort -> Doc
-prettyNetPort (NetPort nOut) = prettyNetOutput nOut
-prettyNetPort (NetPortInlined p ins) =
-  text "Op" PP.<> parens (primPretty p PP.<> sep (prettyNetPort <$> ins))
-
--- | Show instance for 'NetPort'.
-instance Show NetPort where
-  show = render . prettyNetPort
-
---------------------------------------------------------------------------------
--- | A type to refer to a net input port. 'NetInput' is a
---   '(CircuitInterfacePath, NetPort)' pair.
-type NetInput = (CircuitInterfacePath, NetPort)
+prettyNetPort (i, cPath) =
+  text "net" PP.<> int i PP.<> prettyCircuitInterfacePath cPath
 
 -- | Pretty print a 'NetInput'.
 prettyNetInput :: NetInput -> Doc
-prettyNetInput (cPath, nPort) =
-  prettyCircuitInterfacePath cPath <+> text ":=" <+> prettyNetPort nPort
+prettyNetInput = prettyNetPort
+
+-- | Pretty print a 'NetOutput'.
+prettyNetOutput :: NetOutput -> Doc
+prettyNetOutput = prettyNetPort
+
+--------------------------------------------------------------------------------
+-- | A type to represent the connection to a 'Net' input port. It holds
+--   information about the 'NetOutput' on the other end of the connection if
+--   any and on inlined operations if any.
+data NetConnection =
+    -- | Constructor wrapping another 'Net''s output.
+    NetConnection NetOutput
+    -- | Constructor inlining a 'Primitive' operation and a '[NetConnection]'
+    --   list of its inputs.
+  | NetConnectionInlined Primitive [NetConnection]
+
+-- | Pretty print a 'NetConnection'.
+prettyNetConnection :: NetConnection -> Doc
+prettyNetConnection (NetConnection nOut) = prettyNetOutput nOut
+prettyNetConnection (NetConnectionInlined p ncs) =
+  text "Op" PP.<> parens (primPretty p PP.<> sep (prettyNetConnection <$> ncs))
+
+-- | Show instance for 'NetConnection'.
+instance Show NetConnection where
+  show = render . prettyNetConnection
+
+--------------------------------------------------------------------------------
+-- | A type to refer to an input port's connection. 'NetInputConnection' is a
+--   '(CircuitInterfacePath, NetConnection)' pair.
+type NetInputConnection = (CircuitInterfacePath, NetConnection)
+
+-- | Pretty print a 'NetInputConnection'.
+prettyNetInputConnection :: NetInputConnection -> Doc
+prettyNetInputConnection (cPath, nConn) =
+  prettyCircuitInterfacePath cPath <+> text ":=" <+> prettyNetConnection nConn
 
 --------------------------------------------------------------------------------
 -- | A type to represent a netlist node.
-data Net = Net { instanceId :: InstanceId  -- ^ a unique instance identifier
-               , primitive  :: Primitive   -- ^ a primitive operation
-               , inputPorts :: [NetInput]  -- ^ a list of inputs
+data Net = Net { -- | a unique instance identifier
+                 instanceId :: InstanceId
+                 -- | a primitive operation
+               , primitive :: Primitive
+                 -- | a list of input connections
+               , inputConnections :: [NetInputConnection]
                }
 
 -- | Pretty print a 'Net'.
@@ -113,11 +132,11 @@ prettyNet :: Net -> Doc
 prettyNet Net{..} = text "net" PP.<> int instanceId <+> sep xs
   where
     xs = [ primPretty primitive
-         , case inputPorts of
+         , case inputConnections of
              [] -> text "No Inputs"
              ys -> text "Inputs"
-                   <+> braces (nest 2 (commaSep (prettyNetInput <$> ys))) ]
-    commaSep = sep . punctuate comma
+                   <+> braces (nest 2 $ ppConns ys) ]
+    ppConns = sep . punctuate comma . fmap prettyNetInputConnection
 
 -- | Show instance for 'Net'.
 instance Show Net where

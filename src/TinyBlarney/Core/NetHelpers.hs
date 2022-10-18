@@ -2,15 +2,15 @@
 
 module TinyBlarney.Core.NetHelpers (
   netInputPaths
-, netInputsAsNetOutput
 , netInputs
 , netOutputsInfo
 , netOutputWidths
 , netOutputPaths
 , netOutputs
 , netOutput
-, remapNetPortInstanceId
-, remapNetInputInstanceId
+, netPorts
+, remapNetConnectionInstanceId
+, remapNetInputConnectionInstanceId
 , remapNetInstanceId
 , netNamesWith
 , netNames
@@ -31,13 +31,9 @@ import Text.PrettyPrint
 netInputPaths :: Net -> [CircuitInterfacePath]
 netInputPaths = primInputPaths . primitive
 
--- | get all input 'NetOutput's of a 'Net'
-netInputsAsNetOutput :: Net -> [NetOutput]
-netInputsAsNetOutput n = zip (repeat n.instanceId) (netInputPaths n)
-
--- | get all input 'NetInput's of a 'Net'
+-- | get all 'NetInput' input ports of a 'Net'
 netInputs :: Net -> [NetInput]
-netInputs = inputPorts
+netInputs n = zip (repeat n.instanceId) (fst <$> n.inputConnections)
 
 -- | get the output info of a net
 netOutputsInfo :: Net -> [(CircuitInterfacePath, BitWidth)]
@@ -59,21 +55,30 @@ netOutputs n = zip (repeat n.instanceId) (netOutputPaths n)
 netOutput :: Net -> NetOutput
 netOutput = head . netOutputs
 
--- | Helper function remap the 'InstanceId's of a 'NetPort'
-remapNetPortInstanceId :: (InstanceId -> InstanceId) -> NetPort -> NetPort
-remapNetPortInstanceId f (NetPort (instId, cPath)) = NetPort (f instId, cPath)
-remapNetPortInstanceId f (NetPortInlined prim ins) =
-  NetPortInlined prim (remapNetPortInstanceId f <$> ins)
+-- | get the 'NetPort's of a 'Net'
+netPorts :: Net -> [NetPort]
+netPorts n = netInputs n ++ netOutputs n
+
+-- | Helper function remap the 'InstanceId's of a 'NetConnection'
+remapNetConnectionInstanceId :: (InstanceId -> InstanceId) -> NetConnection
+                             -> NetConnection
+remapNetConnectionInstanceId f (NetConnection (instId, cPath)) =
+  NetConnection (f instId, cPath)
+remapNetConnectionInstanceId f (NetConnectionInlined prim ins) =
+  NetConnectionInlined prim (remapNetConnectionInstanceId f <$> ins)
 
 -- | Helper function remap the 'InstanceId's of a 'NetInput'
-remapNetInputInstanceId :: (InstanceId -> InstanceId) -> NetInput -> NetInput
-remapNetInputInstanceId f (p, np) = (p, remapNetPortInstanceId f np)
+remapNetInputConnectionInstanceId :: (InstanceId -> InstanceId)
+                                  -> NetInputConnection
+                                  -> NetInputConnection
+remapNetInputConnectionInstanceId f (p, np) =
+  (p, remapNetConnectionInstanceId f np)
 
 -- | Helper function remap the 'InstanceId's of a 'Net'
 remapNetInstanceId :: (InstanceId -> InstanceId) -> Net -> Net
-remapNetInstanceId remap net@Net{ instanceId = x, inputPorts = y} =
-  net { instanceId = remap x
-      , inputPorts = remapNetInputInstanceId remap <$> y }
+remapNetInstanceId f net@Net{ instanceId = x, inputConnections = y} =
+  net { instanceId = f x
+      , inputConnections = remapNetInputConnectionInstanceId f <$> y }
 
 -- * 'Netlist' helpers
 --------------------------------------------------------------------------------
@@ -81,13 +86,13 @@ remapNetInstanceId remap net@Net{ instanceId = x, inputPorts = y} =
 -- | Derive a map of Net names given a Netlist and a function to process name
 --   hints
 netNamesWith :: (String -> [String] -> String) -> Netlist
-             -> Map NetOutput String
+             -> Map NetPort String
 netNamesWith deriveName nl =
   fromList $ concatMap f (elems nl)
-  where f :: Net -> [(NetOutput, String)]
-        f n = let ret x = (x, deriveName (render $ prettyNetOutput x) [])
+  where f :: Net -> [(NetPort, String)]
+        f n = let ret x = (x, deriveName (render $ prettyNetPort x) [])
                   outs = [ ret nOut | nOut <- netOutputs n ]
-                  ins = [ ret nOut | nOut <- netInputsAsNetOutput n
+                  ins = [ ret nIns | nIns <- netInputs n
                                    , case n.primitive of Interface _ -> True
                                                          _ -> False ]
               in ins ++ outs

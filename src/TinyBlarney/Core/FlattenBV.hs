@@ -50,19 +50,20 @@ putVisited = put
 addNet :: Net -> FlattenBV ()
 addNet = tell . Seq.singleton
 
-flattenBV :: BV -> FlattenBV NetPort
-flattenBV BV{ primitive = p@(Constant _ _) } = return $ NetPortInlined p []
+flattenBV :: BV -> FlattenBV NetConnection
+flattenBV BV{ primitive = p@(Constant _ _) } =
+  return $ NetConnectionInlined p []
 flattenBV bv = do
   visited <- getVisited
   when (not $ bv.instanceId `IntSet.member` visited) do
     putVisited $ IntSet.insert bv.instanceId visited
-    inPorts <- sequence [ do nPort <- flattenBV b
-                             return (path, nPort)
+    inConns <- sequence [ do nConn <- flattenBV b
+                             return (path, nConn)
                         | (path, b) <- bv.receivedSignals ]
     addNet Net { instanceId = bv.instanceId
                , primitive  = bv.primitive
-               , inputPorts = inPorts }
-  return $ NetPort (bv.instanceId, bv.exposedPath)
+               , inputConnections = inConns }
+  return $ NetConnection (bv.instanceId, bv.exposedPath)
 
 flattenBV_ :: BV -> FlattenBV ()
 flattenBV_ bv = flattenBV bv >> return ()

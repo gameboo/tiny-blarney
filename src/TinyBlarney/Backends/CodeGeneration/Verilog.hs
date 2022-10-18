@@ -155,24 +155,24 @@ genNetInstDoc n = case n.primitive of
   (Concatenate _ _) -> instPrim
   (Slice _ _) -> instPrim
   (Custom Circuit{..}) -> do
-    ins <- mapM genNetPortRep nPorts
+    ins <- mapM genNetConnectionRep nConns
     outs <- mapM askIdent nOuts
     return $ vModInst (text name) (text $ name ++ "_net" ++ show n.instanceId)
                       (ins ++ outs)
   (Interface ifc) -> do
-    let rets = sortOn snd $ netInputsAsNetOutput n
-    let args = sortOn fst $ netInputs n
-    sep <$> (zipWithM instPort rets args)
+    let rets = sortOn snd $ netInputs n
+    let args = sortOn fst $ n.inputConnections
+    sep <$> (zipWithM instConn rets args)
   _ -> return empty
   where
-    nPorts = snd <$> n.inputPorts
+    nConns = snd <$> n.inputConnections
     nOuts = netOutputs n
     instPrim = do identDoc <- askIdent $ netOutput n
-                  primDoc <- genPrimRep n.primitive nPorts
+                  primDoc <- genPrimRep n.primitive nConns
                   return $ vAssign identDoc primDoc
-    instPort nOut@(_, p0) (p1, nPort) | p0 == p1 = do
-      identDoc <- askIdent nOut
-      valDoc <- genNetPortRep nPort
+    instConn nPort@(_, p0) (p1, nConn) | p0 == p1 = do
+      identDoc <- askIdent nPort
+      valDoc <- genNetConnectionRep nConn
       return $ vAssign identDoc valDoc
                                       | otherwise =
       err $ "mismatched exported signal for " ++ show n
@@ -210,17 +210,17 @@ genIdentDecl wireOrReg initVal w nOut = do
     DontCareInitVal -> equals <+> vDontCare w
 
 -- | Get a verilog identifier out of the net name map
-askIdent :: NetOutput -> GenNetDocs Doc
-askIdent nOut = do
+askIdent :: NetPort -> GenNetDocs Doc
+askIdent nPort = do
   env <- ask
-  let Just name = M.lookup nOut env.netnames
+  let Just name = M.lookup nPort env.netnames
   return $ text name
 
-genNetPortRep :: NetPort -> GenNetDocs Doc
-genNetPortRep (NetPort netOut) = askIdent netOut
-genNetPortRep (NetPortInlined p ins) = parens <$> genPrimRep p ins
+genNetConnectionRep :: NetConnection -> GenNetDocs Doc
+genNetConnectionRep (NetConnection netOut) = askIdent netOut
+genNetConnectionRep (NetConnectionInlined p ins) = parens <$> genPrimRep p ins
 
-genPrimRep :: Primitive -> [NetPort] -> GenNetDocs Doc
+genPrimRep :: Primitive -> [NetConnection] -> GenNetDocs Doc
 genPrimRep prim ins = case (prim, ins) of
   (Constant k w, []) -> return $ vIntLit k w
   (DontCare w, []) -> return $ vDontCare w
@@ -229,17 +229,17 @@ genPrimRep prim ins = case (prim, ins) of
   (Xor _, [x, y]) -> binOp "^" x y
   (Invert _, [x]) -> unOp "~" x
   (Concatenate _ _, [x, y]) -> do
-    xDoc <- genNetPortRep x
-    yDoc <- genNetPortRep y
+    xDoc <- genNetConnectionRep x
+    yDoc <- genNetConnectionRep y
     return $ braces $ commaSep [xDoc, yDoc]
   (Slice (hi, lo) _, [x]) -> do
-    xDoc <- genNetPortRep x
+    xDoc <- genNetConnectionRep x
     return $ parens xDoc <> brackets (int hi <> colon <> int lo)
   (_, _) -> err $ "unsupported Prim '" ++ show prim ++ "' encountered"
-  where binOp op x y = do xDoc <- genNetPortRep x
-                          yDoc <- genNetPortRep y
+  where binOp op x y = do xDoc <- genNetConnectionRep x
+                          yDoc <- genNetConnectionRep y
                           return $ xDoc <+> text op <+> yDoc
-        unOp op x = do xDoc <- genNetPortRep x
+        unOp op x = do xDoc <- genNetConnectionRep x
                        return $ text op <> parens xDoc
 
 --------------------------------------------------------------------------------
