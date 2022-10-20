@@ -12,8 +12,11 @@ module TinyBlarney.Core.NetHelpers (
 , remapNetConnectionInstanceId
 , remapNetInputConnectionInstanceId
 , remapNetInstanceId
-, netNamesWith
-, netNames
+, netlistNamesWith
+, netlistNames
+, interfaceNamesWith
+, interfaceNames
+, defaultNameDerive
 , externalNetlistInterface
 ) where
 
@@ -83,28 +86,48 @@ remapNetInstanceId f net@Net{ instanceId = x, inputConnections = y} =
 -- * 'Netlist' helpers
 --------------------------------------------------------------------------------
 
--- | Derive a map of Net names given a Netlist and a function to process name
---   hints
-netNamesWith :: ([String] -> Maybe String) -> Netlist
-             -> Map NetPort String
-netNamesWith deriveName nl =
-  fromList $ concatMap f (elems nl)
-  where f :: Net -> [(NetPort, String)]
-        f n = let ret x = (x, (render $ prettyNetPort x) ++ suffix)
-                  suffix = case deriveName [] of Just s -> "_" ++ s
-                                                 _ -> ""
-                  outs = [ ret nOut | nOut <- netOutputs n ]
-                  ins = [ ret nIns | nIns <- netInputs n
-                                   , case n.primitive of Interface _ -> True
-                                                         _ -> False ]
-              in ins ++ outs
+-- | Derive a map of names given a 'Netlist' and a function to process name
+--   hints.
+netlistNamesWith :: ([String] -> Maybe String) -> Netlist -> Map NetPort String
+netlistNamesWith deriveName nl = fromList $ concat allNames
+  where allNames = ifcNames : [ f n | n <- elems nl
+                              , case n.primitive of Interface _ -> False
+                                                    _ -> True ]
+        f n = [ (x, (render $ prettyNetPort x) ++ sfx n) | x <- netOutputs n ]
+        sfx _ = case deriveName [] of Just s -> "_" ++ s
+                                      _ -> ""
+        (ifcId, ifc) = externalNetlistInterface nl
+        -- could have flipped the ifc but it wouldn't change anything for names
+        ifcPfx = Just "ifc"
+        ifcNamesRaw = toList $ interfaceNamesWith deriveName ifcPfx ifc
+        ifcNames = fmap (\(path, nm) -> ((ifcId, path), nm)) ifcNamesRaw
 
--- | Derive a map of Net names given a Netlist
-netNames :: Netlist -> Map NetOutput String
-netNames = netNamesWith dfltDerive
-  where dfltDerive :: [String] -> Maybe String
-        dfltDerive [] = Nothing
-        dfltDerive xs = Just (intercalate "_" $ reverse xs)
+-- | Derive a map of names given a 'Netlist'.
+netlistNames :: Netlist -> Map NetPort String
+netlistNames = netlistNamesWith defaultNameDerive
+
+-- | Derive a map of names given a 'CircuitInterface' and a function to process
+--   name hints.
+interfaceNamesWith :: ([String] -> Maybe String) -> Maybe String
+                   -> CircuitInterface
+                   -> Map CircuitInterfacePath String
+interfaceNamesWith deriveName mPfx ifc = fromList names
+  where names = onCircuitInterfaceLeaves f ifc
+        f ctxt = (ctxt.path, pfx ++ show ctxt.path ++ sfx ctxt.nameHints)
+        pfx = case mPfx of Just s -> s ++ "_"
+                           _ -> ""
+        sfx xs = case deriveName xs of Just s -> "_" ++ s
+                                       _ -> ""
+
+-- | Derive a map of names given a 'CircuitInterface'.
+interfaceNames :: Maybe String -> CircuitInterface
+               -> Map CircuitInterfacePath String
+interfaceNames = interfaceNamesWith defaultNameDerive
+
+-- | Default derivation of names from a collection of name hints
+defaultNameDerive :: [String] -> Maybe String
+defaultNameDerive [] = Nothing
+defaultNameDerive xs = Just (intercalate "_" $ reverse xs)
 
 -- | Return the exposed external 'CircuitInterface' of the given 'Circuit'
 externalNetlistInterface :: Netlist -> CircuitInterface
