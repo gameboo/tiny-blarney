@@ -61,7 +61,7 @@ import TinyBlarney.Core.CircuitInterface
 
 -- | local error helper function
 err :: String -> a
-err m = error $ "TinyBlarney.Core.NetPrimitives: " ++ m
+err m = error $ "TinyBlarney.Core.BasicTypes: " ++ m
 
 --------------------------------------------------------------------------------
 -- Basic types
@@ -275,25 +275,24 @@ data Primitive =
     -- | A custom component
   | Custom Circuit
 
-    -- | A circuit interface primitive
-    --   BVs with this primitive are flatten roots or flatten leaves based on
-    --   the polarity of the port described.
-    --   The intended use is to have a single Interface primitive per circuit,
-    --   and have a rich associated 'CircuitInterface'.
-    --   The embedded 'CircuitInterface''s polarity can be flipped to obtain the
-    --   circuit's interface as perceived from the outside of the circuit
+    -- | A circuit interface primitive.
+    --   'BV's with this primitive are flatten roots and/or flatten leaves
+    --   (based on the direction of the port(s) described).
+    --   The intended use for this primitive is to have exactly one instance of
+    --   it per circuit, with a rich associated 'CircuitInterface'.
+    --   The 'CircuitInterface' argument describes the primitive's interface as
+    --   perceived by the rest of the circuit. The direction of the ports in
+    --   this embedded 'CircuitInterface' can be flipped to obtain the circuit's
+    --   interface as perceived from the outside of the circuit
     --   (example:
     --     From a circuit environment's perspective (the context instanciating
-    --     a circuit), an Interface with a PortIn "A" and a PortOut "B"
-    --     describes a circuit which will consume values from its environment
-    --     through its "A" port, and produce values through its "B" port.
-    --     From within that circuit, the Interface should be flipped, and
-    --     present "A" as a PortOut which produces values for the rest of the
-    --     netlist to consume, and "B" as a PortIn which consumes values
-    --     produced by the rest of the nets in the netlist.
-    --     A 'Primitive' is associated with nets of a netlist, and for this
-    --     reason, it is expected that the 'CircuitInterface' parameter to this
-    --     constructor be the one with the second described polarity.
+    --     a circuit), an Interface with an input port "A" and an output port
+    --     "B" describes a circuit which will consume values from its
+    --     environment through its "A" port, and produce values through its "B"
+    --     port. From within that circuit, the Interface is flipped, and
+    --     presents "A" as an output port which produces values for the rest of
+    --     the netlist to consume, and "B" as an input port which consumes
+    --     values produced by the rest of the nets in the netlist.
     --   )
   | Interface CircuitInterface
 
