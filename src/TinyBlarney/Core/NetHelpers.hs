@@ -27,6 +27,10 @@ import Data.List
 import Data.Array
 import Text.PrettyPrint
 
+-- | local error helper function
+err :: String -> a
+err m = error $ "TinyBlarney.Core.NetHelpers: " ++ m
+
 -- * Individual 'Net' helpers
 --------------------------------------------------------------------------------
 
@@ -130,8 +134,15 @@ defaultNameDerive [] = Nothing
 defaultNameDerive xs = Just (intercalate "_" $ reverse xs)
 
 -- | Return the exposed external 'CircuitInterface' of the given 'Circuit'
-externalNetlistInterface :: Netlist -> CircuitInterface
-externalNetlistInterface nl = mconcat (snd <$> ifcs)
+--externalNetlistInterface :: Netlist -> CircuitInterface
+--externalNetlistInterface nl = mconcat (snd <$> ifcs)
+--  where ifcs = sortOn fst [ (nId, metaInstanceId nId $ flipCircuitInterface ifc)
+--                          | n@Net{ instanceId = nId
+--                                 , primitive = Interface ifc } <- elems nl ]
+externalNetlistInterface :: Netlist -> (InstanceId, CircuitInterface)
+externalNetlistInterface nl = if length ifcs == 1 then head ifcs
+                                                  else fail
   where ifcs = sortOn fst [ (nId, metaInstanceId nId $ flipCircuitInterface ifc)
                           | n@Net{ instanceId = nId
                                  , primitive = Interface ifc } <- elems nl ]
+        fail = err "There should be exactly one interface per Circuit"
