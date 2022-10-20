@@ -11,6 +11,7 @@ module TinyBlarney.Backends.PrettyHelpers.C (
 , cAssign
 , cNew
 , cPostIncr
+, cOrAccum
 , cDirectAccess
 , cIndirectAccess
 , cFor
@@ -49,11 +50,14 @@ type CStmt = Doc
 -- C expressions
 --------------------------------------------------------------------------------
 
+cBlock :: [CStmt] -> CStmt
+cBlock stmts = hang lbrace 2 (vcat stmts) $$ rbrace
+
 cFunCall :: CExpr -> [CExpr] -> CExpr
-cFunCall f args = hsep [f, parens (commaSep $ args)]
+cFunCall f args = f <+> parens (commaSep $ args)
 
 cAssign :: CExpr -> CExpr -> CExpr
-cAssign lhs rhs = hsep [lhs, equals, rhs]
+cAssign lhs rhs = hang (lhs <+> equals) 2 rhs
 
 cNew :: CType -> CExpr
 cNew t = text "new" <+> text t
@@ -63,6 +67,9 @@ cPostIncr nm 1 = text nm <> text "++"
 cPostIncr nm (-1) = text nm <> text "--"
 cPostIncr nm n | n < 0 = text nm <+> text "-=" <+> int n
                | otherwise = text nm <+> text "+=" <+> int n
+
+cOrAccum :: CIdent -> CExpr -> CExpr
+cOrAccum lhs rhs = hang (text lhs <+> text "|=") 2 rhs
 
 cDirectAccess :: CIdent -> CIdent -> CExpr
 cDirectAccess obj field = text obj <> char '.' <> text field
@@ -75,17 +82,17 @@ cIndirectAccess obj field = text obj <> text "->" <> text field
 
 cFor :: CExpr -> CExpr -> CExpr -> [CStmt] -> CStmt
 cFor initE testE updtE stmts =
-  text "for" <+> parens (semiSep [initE, testE, updtE]) <+> braces (vcat stmts)
+  text "for" <+> parens (semiSep [initE, testE, updtE]) $$ cBlock stmts
 
 cWhile :: CExpr -> [CStmt] -> CStmt
-cWhile testE stmts = text "while" <+> parens testE <+> braces (vcat stmts)
+cWhile testE stmts = text "while" <+> parens testE $$ cBlock stmts
 
 cDoWhile :: CExpr -> [CStmt] -> CStmt
-cDoWhile testE stmts =
-  text "do" <+> braces (vcat stmts) <+> text "while" <+> parens testE <+> semi
+cDoWhile testE stmts = text "do" $$ cBlock stmts
+                                 $$ text "while" <+> parens testE <+> semi
 
 cSwitch :: CExpr -> [(CExpr, [CStmt])] -> Maybe [CStmt] -> CStmt
-cSwitch testE cases dflt = text "switch" <+> parens testE <+> braces (vcat alts)
+cSwitch testE cases dflt = text "switch" <+> parens testE $$ cBlock alts
   where alt (matchE, stmts) = vcat [ text "case" <+> matchE <> colon
                                    , nest 2 $ vcat stmts ]
         dfltCase (Just stmts) = vcat [ text "default" <> colon
@@ -100,16 +107,16 @@ cIf alts fallThrough
 
 cIf1 :: [(CExpr, [CStmt])] -> Maybe [CStmt] -> CStmt
 cIf1 ((testE, stmts):[]) fThrough = text "if" <+> parens testE
-                                              <+> braces (vcat stmts)
-                                              <+> cElse WrapElse fThrough
+                                              $$ cBlock stmts
+                                              $$ cElse WrapElse fThrough
 cIf1 ((testE, stmts):alts) fThrough = text "if" <+> parens testE
-                                                <+> braces (vcat stmts)
-                                                <+> text "else"
+                                                $$ cBlock stmts
+                                                $$ text "else"
                                                 <+> cIf1 alts fThrough
 
 data WrapElse = WrapElse | NoWrapElse
 cElse :: WrapElse -> Maybe [CStmt] -> CStmt
-cElse WrapElse (Just stmts) = text "else" <+> braces (vcat stmts)
+cElse WrapElse (Just stmts) = text "else" $$ cBlock stmts
 cElse NoWrapElse (Just stmts) = vcat stmts
 cElse _ _ = empty
 
@@ -120,9 +127,8 @@ cDef (cType, cIdent) Nothing = text cType <+> text cIdent <> semi
 
 cFunDef :: CType -> CIdent -> [CTypedIdent] -> [CStmt] -> CStmt
 cFunDef fType fIdent fArgs fStmts =
-  text fType <+> text fIdent <+> parens (commaSep args) <+> braces body
+  text fType <+> text fIdent <+> parens (commaSep args) $$ cBlock fStmts
   where args = (\(t, nm) -> text t <+> text nm) <$> fArgs
-        body = vcat fStmts
 
 cDelete :: CIdent -> CStmt
 cDelete nm = text "delete" <+> text nm <> semi
