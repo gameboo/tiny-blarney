@@ -51,5 +51,8 @@ main = do
   putStrLn $ show c
   putStrLn "--------------------------------------------------"
   forM_ vs \v -> putStrLn v
+  putStrLn "--------------------------------------------------"
+  sim <- buildSimulatorWith (Just Verilog) c
+  putStrLn "simulator built"
   where c = buildCircuit "carryChainAdder" $ carryChainAdder @4
         vs = generateVerilog c
