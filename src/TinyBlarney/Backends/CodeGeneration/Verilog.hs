@@ -39,12 +39,15 @@ err m = error $ "TinyBlarney.Backends.CodeGeneration.Verilog: " ++ m
 
 -- | Generate all Verilog code for a 'Circuit'
 generateVerilog :: Circuit -> M.Map String String
-generateVerilog c = M.fromList [ (c'.name, render . prettyVerilogModule $ c')
+generateVerilog c = M.fromList [ (c'.name, generateTopVerilog c')
                                | c' <- getAllUniqueCircuits c ]
 
 -- | Generate Verilog code for the top entity of a 'Circuit'
 generateTopVerilog :: Circuit -> String
-generateTopVerilog = render . prettyVerilogModule
+generateTopVerilog = renderStyle style . prettyVerilogModule
+  where style = Style { mode = PageMode
+                      , lineLength = 80
+                      , ribbonsPerLine = 1.1 }
 
 -- Internal helpers
 --------------------------------------------------------------------------------
@@ -73,9 +76,10 @@ prettyVerilogModule Circuit{ backingImplementation = Netlist netlist, .. } =
               ++ " - netnames: " ++ show netnames
     ifcPorts =
       onCircuitInterfaceLeaves ifcPort interface
-    ifcPortDoc (nm, pDir, w) =
-      text vDir <+> text "wire" <+> brackets (int (w-1) <> text ":0")
-                <+> text nm
+    ifcPortDoc (nm, pDir, w) = hsep
+      [ text vDir, text "wire"
+      , if w > 1 then brackets (int (w-1) <> text ":0") else empty
+      , text nm ]
       where vDir = case pDir of In -> "input"
                                 Out -> "output"
     modArgs = commaSep (ifcPortDoc <$> ifcPorts)
@@ -136,7 +140,7 @@ genNetDeclDoc n = case n.primitive of
   (Xor w) -> genIdentDecl Wire NoInitVal w nOut
   (Invert w) -> genIdentDecl Wire NoInitVal w nOut
   (Concatenate w0 w1) -> genIdentDecl Wire NoInitVal (w0 + w1) nOut
-  (Slice _ w) -> genIdentDecl Wire NoInitVal w nOut
+  (Slice (hi, lo) _) -> genIdentDecl Wire NoInitVal (hi-lo) nOut
   (Custom c) ->
     sep <$> mapM (\(p, w) -> genIdentDecl Wire NoInitVal w (nId, p)) nOutsInfo
   _ -> return empty
@@ -213,8 +217,9 @@ genIdentDecl wireOrReg initVal w nOut = do
 askIdent :: NetPort -> GenNetDocs Doc
 askIdent nPort = do
   env <- ask
-  let Just name = M.lookup nPort env.netnames
-  return $ text name
+  case M.lookup nPort env.netnames of
+    Just name -> return $ text name
+    _ -> err $ "name for " ++ show nPort ++ " not in\n" ++ show env.netnames
 
 genNetConnectionRep :: NetConnection -> GenNetDocs Doc
 genNetConnectionRep (NetConnection netOut) = askIdent netOut
@@ -234,7 +239,8 @@ genPrimRep prim ins = case (prim, ins) of
     return $ braces $ commaSep [xDoc, yDoc]
   (Slice (hi, lo) _, [x]) -> do
     xDoc <- genNetConnectionRep x
-    return $ parens xDoc <> brackets (int hi <> colon <> int lo)
+    let sliceDoc = if hi == lo then int hi else int hi <> colon <> int lo
+    return $ xDoc <> brackets sliceDoc
   (_, _) -> err $ "unsupported Prim '" ++ show prim ++ "' encountered"
   where binOp op x y = do xDoc <- genNetConnectionRep x
                           yDoc <- genNetConnectionRep y
