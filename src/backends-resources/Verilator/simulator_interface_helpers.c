@@ -1,3 +1,7 @@
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 #include <fcntl.h>
 #include <libgen.h>
 #include <sys/stat.h>
@@ -9,11 +13,11 @@
 #include <stdint.h>
 #include <dirent.h>
 
-#define DIVCEIL(x, y) (1 + ((x - 1) / y))
+#include "simulator_interface_helpers.h"
 
 // create path
 //////////////
-static int create_dir_path (const char* path, mode_t mode) {
+static int create_dir_path (char const *path, mode_t mode) {
   int res = -1; // initialise return status to error
   DIR* dir = opendir (path);
   int errsv = errno;
@@ -35,20 +39,9 @@ static int create_dir_path (const char* path, mode_t mode) {
   return res;
 }
 
-typedef struct {
-  char* pathname;
-  int fd;
-  mode_t mode;
-  int flags;
-  size_t bit_width;
-  size_t byte_width;
-  uint8_t* buf;
-  ssize_t byte_count;
-} bit_channel_t;
-
 // create a blue unix fifo descriptor
 /////////////////////////////////////
-static bit_channel_t* bit_channel_create ( char* pathname
+static bit_channel_t* bit_channel_create ( char const *pathname
                                          , mode_t mode
                                          , int flags
                                          , size_t e_bitwidth ) {
@@ -78,7 +71,7 @@ static bit_channel_t* bit_channel_create ( char* pathname
 
 // destroy a bit channel descriptor (free dynamically allocated memory)
 ///////////////////////////////////////////////////////////////////////
-static void bit_channel_destroy (bit_channel_t* desc) {
+static void bit_channel_destroy_desc (bit_channel_t* desc) {
   free (desc->pathname);
   if (desc->buf) free (desc->buf);
   free (desc);
@@ -179,14 +172,6 @@ static void bit_channel_unlink_fifo (bit_channel_t* desc) {
   }
 }
 
-// desctroy the unix fifo described by `desc`
-/////////////////////////////////////////////
-static void bit_channel_destroy_fifo (bit_channel_t* desc) {
-  bit_channel_close_fifo (desc);
-  bit_channel_unlink_fifo (desc);
-  bit_channel_destroy_fifo_desc (desc);
-}
-
 // read bytes from the fifo and aggregate them in the descriptor buffer
 ///////////////////////////////////////////////////////////////////////
 static void bit_channel_read_fifo (bit_channel_t* desc) {
@@ -279,29 +264,41 @@ uint8_t* bit_channel_produce (bit_channel_t* desc, uint8_t* elemsrc) {
 }
 
 // open a bit channel for production
-bit_channel_t* bit_channel_create_producer ( char* pathname
+bit_channel_t* bit_channel_create_producer ( char const *pathname
                                            , size_t bitwidth ) {
   // initialise a fifo descriptor
   bit_channel_t* desc = bit_channel_create ( pathname
                                            , 0644
                                            , O_RDWR | O_NONBLOCK
                                            , bitwidth );
-  // open the unix fifo
-  bit_channel_open_fifo (desc);
+  // create and open the unix fifo
+  bit_channel_create_fifo (desc);
   // return the descriptor
   return desc;
 }
 
 // open a bit channel for consumption
-bit_channel_t* bit_channel_create_consumer ( char* pathname
+bit_channel_t* bit_channel_create_consumer ( char const *pathname
                                            , size_t bitwidth ) {
   // initialise a fifo descriptor
   bit_channel_t* desc = bit_channel_create ( pathname
                                            , 0622
                                            , O_RDWR | O_NONBLOCK
                                            , bitwidth );
-  // open the unix fifo
-  bit_channel_open_fifo (desc);
+  // create and open the unix fifo
+  bit_channel_create_fifo (desc);
   // return the descriptor
   return desc;
 }
+
+// desctroy the bit channel described by `desc`
+///////////////////////////////////////////////
+void bit_channel_destroy (bit_channel_t* desc) {
+  bit_channel_close_fifo (desc);
+  bit_channel_unlink_fifo (desc);
+  bit_channel_destroy_desc (desc);
+}
+
+#ifdef __cplusplus
+}
+#endif
