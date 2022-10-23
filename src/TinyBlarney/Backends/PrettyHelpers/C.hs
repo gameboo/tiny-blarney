@@ -7,7 +7,12 @@ Stability   : experimental
 -}
 
 module TinyBlarney.Backends.PrettyHelpers.C (
-  cFunCall
+  CType
+, CIdent
+, CTypedIdent
+, CExpr
+, CStmt
+, cFunCall
 , cAssign
 , cNew
 , cPostIncr
