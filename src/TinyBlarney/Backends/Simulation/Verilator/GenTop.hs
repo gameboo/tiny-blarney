@@ -14,7 +14,9 @@ module TinyBlarney.Backends.Simulation.Verilator.GenTop (
 ) where
 
 import TinyBlarney.Core
+import TinyBlarney.Misc.Misc
 import TinyBlarney.Misc.PrettyHelpers.C
+import TinyBlarney.Backends.Simulation.Verilator.Communication
 
 import Prelude hiding ((<>))
 import qualified Data.Map as M
@@ -26,9 +28,103 @@ import Text.PrettyPrint
 err :: String -> a
 err m = error $ "TinyBlarney.Backends.Simulation.Verilator.GenTop: " ++ m
 
+type Port = (String, BitWidth)
+type InPort = Port
+type OutPort = Port
+
+-- Extract interface port information
+extractIfc :: Circuit -> String -> ([InPort], [OutPort])
+extractIfc c pfx = ( [(nm, w) | (In, nm, w) <- ifcPorts]
+                   , [(nm, w) | (Out, nm, w) <- ifcPorts] )
+  where
+    ifcnames = interfaceNames (Just pfx) c.interface
+    ifcPort ctxt = case ctxt.ifc of
+      Port pDir w -> (pDir, fromMaybe fail $ M.lookup ctxt.path ifcnames, w)
+      _ -> fail
+      where fail = err $ "Could not identify interface port, ctxt: "
+                         ++ show ctxt ++ " - ifcnames: " ++ show ifcnames
+    ifcPorts = onCircuitInterfaceLeaves ifcPort c.interface
+
+defTopInputAssigns :: CType -> [InPort] -> Doc
+defTopInputAssigns topT inPorts =
+  cFunDef "void" "inputAssigns" [(topT++"*", "top"), ("const uint8_t*", "raw")]
+          [snd $ foldl assignInPort (0, empty) inPorts]
+  where
+    assignInPort (off, doc) (nm, w) =
+      ( off + w
+      , doc $+$ cFunCall (text "bitmemcpy")
+                         [ text $ "(void*) &(top->" ++ nm ++ ")", int 0
+                         , text "raw", int off, int w ] <> semi )
+
+-- | Derive the code for the main function of the simulation toplevel
+defMain :: CType -> [InPort] -> [OutPort] -> Doc
+defMain topT inPorts outPorts =
+  cFunDef "int" "main" [("int", "argc"), ("char**", "argv")]
+          [ cFunCall (text "Verilated::commandArgs")
+                     (text <$> ["argc", "argv"]) <> semi
+          , cDef (topT ++ "*", "top") (Just . cNew $ topT)
+          , cDef ("void*", "simReq") (Just $ cFunCall (text "malloc")
+                                                      [int inReqByteW])
+          , createInChannel
+          , createOutChannel
+          , cDef ("bool", "done") (Just $ text "false")
+          , cWhile (cNot . cOrs $ [ cFunCall (text "Verilated::gotFinish") []
+                                  , text "done" ])
+                   [ deqInChannel "simReq"
+                   , cSwitch (cDeref $ cCast "uint8_t*" (text "simReq"))
+                             [ (int $ fromIntegral Evaluate, handleEvalCmd)
+                             , (int $ fromIntegral Finish, handleFinishCmd) ]
+                             (Just handleUnknownCmd)
+                   ]
+          , destroyInChannel
+          , destroyOutChannel
+          , cFunCall (text "free") [text "simReq"] <> semi
+          , cFunCall (cIndirectAccess "top" "final") [] <> semi
+          , cDelete "top"
+          , cReturn (int 0) ]
+  where
+    -- channel widths
+    inSigsW = sum . (snd  <$>) $ inPorts
+    inSigsByteW = ceilDiv inSigsW 8
+    inReqW = 8 + 64 + inSigsW
+    inReqByteW = 1 + 8 + inSigsByteW
+    outSigsW = sum . (snd  <$>) $ outPorts
+    outSigsByteW = ceilDiv outSigsW 8
+    outRspW = 8 + 64 + outSigsW
+    outRspByteW = 1 + 8 + outSigsByteW
+    -- channel handles
+    (createInChannel, deqInChannel, destroyInChannel) =
+      bitChannel In inReqW "simReqSink" "simReqSource"
+    (createOutChannel, enqOutChannel, destroyOutChannel) =
+      bitChannel Out outRspW "simRspSource" "simRspSink"
+    -- event handles
+    handleEvalCmd = [text "//todo"]
+    handleFinishCmd = [text "//todo"]
+    handleUnknownCmd = [text "//todo", text "return 0;"]
+
+-- | Derive bit channel code blocks
+bitChannel :: PortDir -> BitWidth -> String -> CIdent
+           -> (CStmt, CIdent -> CStmt, CStmt)
+bitChannel pDir w ffnm nm = (createChannel, useChannel, destroyChannel)
+  where
+    chanSymStr = ("bit_channel_" ++)
+    chanSym = text . chanSymStr
+    createChannel = cDef (chanSymStr "t*", nm) (Just channelInit)
+    channelInit = cFunCall (chanSym case pDir of In -> "create_consumer"
+                                                 Out -> "create_producer")
+                           [doubleQuotes (text ffnm), int w]
+    useChannel arg = cFunCall (chanSym $ case pDir of In -> "consume"
+                                                      Out -> "produce")
+                              [ text nm
+                              , cCast "uint8_t*"
+                                      (char '&' <> parens (text arg)) ] <> semi
+    destroyChannel = cFunCall (chanSym "destroy") [text nm] <> semi
+
 -- | Generate a C++ verilator simulation toplevel
 genVerilatorTop :: Circuit -> String
-genVerilatorTop c = renderStyle style $ vcat [ headersDoc, genMain c ]
+genVerilatorTop c = renderStyle style $ vcat [ headersDoc
+                                             , defTopInputAssigns topT inPorts
+                                             , defMain topT inPorts outPorts ]
   where
     style = Style { mode = PageMode
                   , lineLength = 80
@@ -37,72 +133,5 @@ genVerilatorTop c = renderStyle style $ vcat [ headersDoc, genMain c ]
       [ text "#include" <+> text "<verilated.h>"
       , text "#include" <+> doubleQuotes (text "simulator_interface_helpers.h")
       , text "#include" <+> doubleQuotes (text $ "V" ++ c.name ++ ".h") ]
-
--- | Derive the code for the main function of the simulation toplevel
-genMain :: Circuit -> Doc
-genMain c =
-  cFunDef "int" "main" [("int", "argc"), ("char**", "argv")]
-          [ cFunCall (text "Verilated::commandArgs")
-                     (text <$> ["argc", "argv"]) <> semi
-          , cDef ("V" ++ c.name ++ "*", "top") (Just . cNew $ "V" ++ c.name)
-          , vcat insCreate
-          , vcat outsCreate
-          , cWhile (char '!' <> cFunCall (text "Verilated::gotFinish") [])
-                   mainLoop
-          , vcat outsDestroy
-          , vcat insDestroy
-          , cFunCall (cIndirectAccess "top" "final") [] <> semi
-          , cDelete "top"
-          , cReturn (int 0) ]
-  where
-    mainLoop =
-      [ cDef ("bool", "needEval") (Just $ text "false")
-      , vcat (assignInPort <$> bitChannelIns)
-      , cIf [ ( text "needEval"
-              , [ cFunCall (cIndirectAccess "top" "eval") [] <> semi
-                , vcat (drainOutPort <$> bitChannelOuts)
-                , text ("static int n = 0; printf(\" >>>>> %d <<<<< \\n\", n++);")
-                ] ) ]
-            Nothing ]
-    -- Communication with outside processes
-    bitChannels = bitChannel <$> ifcPorts
-    bitChannelIns = [ (w, x, y, z) | (In, w, x, y, z) <- bitChannels ]
-    bitChannelOuts = [ (w, x, y, z) | (Out, w, x, y, z) <- bitChannels ]
-    (insW, insCreate, insUse, insDestroy) = unzip4 bitChannelIns
-    (_, outsCreate, outsUse, outsDestroy) = unzip4 bitChannelOuts
-    --
-    assignInPort (w, _, consume, _) =
-      cOrAccum "needEval"
-               (hang (sep [consume, text "=="]) 2
-                     (text "DIVCEIL" <> parens (int w <> comma <+> int 8)))
-      <> semi
-    drainOutPort (_, _, produce, _) = produce <> semi
-    -- Extract interface port information
-    ifcPrefix = "ifc"
-    ifcnames = interfaceNames (Just ifcPrefix) c.interface
-    ifcPort ctxt = case ctxt.ifc of
-      Port pDir w -> (fromMaybe fail $ M.lookup ctxt.path ifcnames, pDir, w)
-      _ -> fail
-      where fail = err $ "Could not identify interface port, ctxt: "
-                         ++ show ctxt ++ " - ifcnames: " ++ show ifcnames
-    ifcPorts = onCircuitInterfaceLeaves ifcPort c.interface
-
--- | Derive bit channel code blocks
-bitChannel :: (String, PortDir, BitWidth)
-           -> (PortDir, BitWidth, CStmt, CStmt, CStmt)
-bitChannel (nm, pDir, w) = (pDir, w, createChannel, useChannel, destroyChannel)
-  where
-    chanSymStr = ("bit_channel_" ++)
-    chanSym = text . chanSymStr
-    ffName = nm ++ "_" ++ show w ++ case pDir of In -> "bit_sink"
-                                                 Out -> "bit_source"
-    createChannel = cDef (chanSymStr "t*", nm) (Just channelInit)
-    channelInit = cFunCall (chanSym case pDir of In -> "create_consumer"
-                                                 Out -> "create_producer")
-                           [doubleQuotes (text ffName), int w]
-    useChannel = cFunCall (chanSym $ case pDir of In -> "consume_non_block"
-                                                  Out -> "produce")
-                          [ text nm
-                          , text "(uint8_t*)"
-                            <+> char '&' <> parens (cIndirectAccess "top" nm) ]
-    destroyChannel = cFunCall (chanSym "destroy") [text nm] <> semi
+    (inPorts, outPorts) = extractIfc c "ifc"
+    topT = "V" ++ c.name

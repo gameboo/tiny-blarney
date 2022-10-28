@@ -1,5 +1,6 @@
-{-# LANGUAGE BlockArguments      #-}
-{-# LANGUAGE OverloadedRecordDot #-}
+{-# LANGUAGE BlockArguments        #-}
+{-# LANGUAGE OverloadedRecordDot   #-}
+{-# LANGUAGE DuplicateRecordFields #-}
 
 {- |
 
@@ -14,12 +15,16 @@ module TinyBlarney.Backends.Simulation.Verilator (
 ) where
 
 import TinyBlarney.Core
+import TinyBlarney.Misc.Misc
 import TinyBlarney.Backends.CodeGeneration.Verilog
 import TinyBlarney.Backends.Simulation.Types
 import TinyBlarney.Backends.Simulation.Verilator.GenTop
+import TinyBlarney.Backends.Simulation.Verilator.Communication
 
 import qualified Data.Map as M
 import Data.Time
+import Data.List
+import Data.Proxy
 import Control.Monad
 import System.IO
 import System.Exit
@@ -59,7 +64,7 @@ buildSimulatorWithVerilator c = do
   let tmpDir = tmp ++ "/verilator_" ++ c.name ++ timeStr
   createDirectoryIfMissing True tmpDir
   putStrLn $ "created " ++ tmpDir
-  withCurrentDirectory tmpDir do
+  verilatorSim <- withCurrentDirectory tmpDir do
     -- Generate all the verilog for the given circuit
     putStrLn $ "- Verilog generation for " ++ c.name
     let vs = M.toList . generateVerilog $ c
@@ -96,4 +101,42 @@ buildSimulatorWithVerilator c = do
                           , "-f", "V" ++ c.name ++ ".mk", c.name ]
     simPath <- canonicalizePath $ "obj_dir/" ++ c.name
     putStrLn $ "  simulator generated: " ++ simPath
-  return $ err ("TODO")
+    return simPath
+  return \ins-> do
+    -- spawn the verilator simulator and open communication channels
+    pHandle <- spawnProcess verilatorSim []
+    reqSink <- openFile "simReqSink" WriteMode
+    rspSource <- openFile "simRspSource" ReadMode
+    -- wire up the inputs
+    let insWidths = getPortInWidths c.interface
+    let sigs = M.elems ins
+    liftNat (sum insWidths) \(_ :: Proxy n) -> do
+      let buildReq ws (t, xs) = SimReq {
+            simCmd = Evaluate
+          , simTime = t
+          , payload = unsafeBitNFromInteger (sizedListToInteger $ zip ws xs)
+                                            (sum ws) }
+      let reqs :: [SimReq (Bit n)] =
+            (buildReq insWidths <$>) . transposePropagate (repeat 0) $ sigs
+      -- enque all inputs
+      sendSimReqs reqSink reqs
+      -- then enque a kill command
+      let finishReq :: SimReq (Bit n) = SimReq { simCmd = Finish
+                                               , simTime = 0
+                                               , payload = bitNFromInteger 0 }
+      sendSimReq reqSink finishReq
+    -- wire up the outputs
+    let outsWidths = getPortOutWidths c.interface
+    outSigs <- liftNat (sum outsWidths) \(_ :: Proxy n) -> do
+      rsps :: [SimRsp (Bit n)] <- receiveSimRsps rspSource
+      let extractRsp ws simRsp =
+            zip (repeat simRsp.simTime)
+                (sizeListIntegerToList ws (unsafeBitNToInteger simRsp.payload))
+      return . transpose . (extractRsp outsWidths <$>) . init $ rsps
+    -- close communication channels and wait for simulation process termination
+    hClose rspSource
+    hClose reqSink
+    waitForProcess pHandle
+    -- return the output signals
+    let outPaths = getPortOutPaths c.interface
+    return . M.fromList $ zip outPaths outSigs
