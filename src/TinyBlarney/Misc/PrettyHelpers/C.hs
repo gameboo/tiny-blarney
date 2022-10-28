@@ -1,12 +1,12 @@
 {- |
 
-Module      : TinyBlarney.Backends.PrettyHelpers.C
+Module      : TinyBlarney.Misc.PrettyHelpers.C
 Description : Helper to pretty print C and C++
 Stability   : experimental
 
 -}
 
-module TinyBlarney.Backends.PrettyHelpers.C (
+module TinyBlarney.Misc.PrettyHelpers.C (
   CType
 , CIdent
 , CTypedIdent
@@ -24,6 +24,11 @@ module TinyBlarney.Backends.PrettyHelpers.C (
 , cDoWhile
 , cSwitch
 , cIf
+, cCast
+, cDeref
+, cNot
+, cOrs
+, cAnds
 , cDef
 , cFunDef
 , cDelete
@@ -32,6 +37,7 @@ module TinyBlarney.Backends.PrettyHelpers.C (
 
 import Prelude hiding ((<>))
 import Text.PrettyPrint
+import Data.List
 import Numeric (showHex)
 
 -- pretty helpers
@@ -124,6 +130,21 @@ cElse :: WrapElse -> Maybe [CStmt] -> CStmt
 cElse WrapElse (Just stmts) = text "else" $$ cBlock stmts
 cElse NoWrapElse (Just stmts) = vcat stmts
 cElse _ _ = empty
+
+cCast :: CType -> CExpr -> CExpr
+cCast t e = parens (text t) <> parens e
+
+cDeref :: CExpr -> CExpr
+cDeref e = char '*' <> parens e
+
+cNot :: CExpr -> CExpr
+cNot e = char '!' <> parens e
+
+cOrs :: [CExpr] -> CExpr
+cOrs = sep . intersperse (text "||") . (parens <$>)
+
+cAnds :: [CExpr] -> CExpr
+cAnds = sep . intersperse (text "&&") . (parens <$>)
 
 cDef :: CTypedIdent -> Maybe CExpr -> CStmt
 cDef (cType, cIdent) (Just initExpr) =

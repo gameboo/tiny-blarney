@@ -14,7 +14,7 @@ module TinyBlarney.Backends.Simulation.Verilator.GenTop (
 ) where
 
 import TinyBlarney.Core
-import TinyBlarney.Backends.PrettyHelpers.C
+import TinyBlarney.Misc.PrettyHelpers.C
 
 import Prelude hiding ((<>))
 import qualified Data.Map as M

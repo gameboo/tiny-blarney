@@ -37,8 +37,8 @@ module TinyBlarney.Core.Bit (
 , unsafeToBitList
 ) where
 
+import TinyBlarney.Misc.Misc
 import TinyBlarney.Core.BV
-import TinyBlarney.Core.Misc
 
 import GHC.TypeLits
 

@@ -19,9 +19,9 @@ module TinyBlarney.Core.Bits (
 , internalInterface
 ) where
 
+import TinyBlarney.Misc.Misc
 import TinyBlarney.Core.BV
 import TinyBlarney.Core.Bit
-import TinyBlarney.Core.Misc
 import TinyBlarney.Core.BasicTypes
 
 import GHC.TypeLits
