@@ -13,11 +13,13 @@ These functions do not depend on anything specific to TinyBlarney
 
 module TinyBlarney.Misc.Misc (
   valueOf
+, liftNat
 , clamp
 , ceilDiv
 , integerToWord8List
 , word8ListToInteger
 , sizedListToInteger
+, sizeListIntegerToList
 , unfoldWhileM
 , update
 , transposePropagate
@@ -29,9 +31,19 @@ import Data.List
 import Data.Proxy
 import GHC.TypeLits
 
+-- | local error helper function
+err :: String -> a
+err m = error $ "TinyBlarney.Misc.Misc: " ++ m
+
 -- | Lower a type of kind 'Nat' to 'Int' value (with type application @\@@)
 valueOf :: forall n. (KnownNat n) => Int
 valueOf = fromInteger (natVal @n Proxy)
+
+-- | Lift an integer value to type-level natural
+liftNat :: Integral a => a -> (forall n. KnownNat n => Proxy n -> k) -> k
+liftNat v k = case someNatVal (toInteger v) of
+                Just (SomeNat (x :: Proxy n)) -> k x
+                _ -> err $ "could not liftNat " ++ show (toInteger v)
 
 -- | clamp a given value to the provided width
 clamp :: (Num a, Bits a) => Int -> a -> a
@@ -53,7 +65,12 @@ word8ListToInteger words = sum [ toInteger x * 2 ^ (8 * i)
 
 sizedListToInteger :: (Integral a, Integral b) => [(a, b)] -> Integer
 sizedListToInteger = snd . foldl f (0, 0)
-  where f (accW, accN) (w, n) = (accW + w, accN + (toInteger n * 2 ^ accW))
+  where f (accS, accN) (s, n) = (accS + s, accN + (toInteger n * 2 ^ accS))
+
+sizeListIntegerToList :: (Integral a, Num b) => [a] -> Integer -> [b]
+sizeListIntegerToList [] n = [fromInteger n]
+sizeListIntegerToList (s:ss) n = fromInteger i' : sizeListIntegerToList ss i''
+  where (i'', i') = quotRem n (2^s)
 
 unfoldWhileM :: Monad m => (a -> Bool) -> m a -> m [a]
 unfoldWhileM p m =
