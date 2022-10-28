@@ -13,9 +13,9 @@ module TinyBlarney.Backends.Simulation.SimulatorBuild (
 ) where
 
 import TinyBlarney.Core
+import TinyBlarney.Backends.Simulation.Types
 import TinyBlarney.Backends.Simulation.Haskell
 import TinyBlarney.Backends.Simulation.Verilator
-import TinyBlarney.Backends.Simulation.SimulatorTypes
 
 import Data.Map
 

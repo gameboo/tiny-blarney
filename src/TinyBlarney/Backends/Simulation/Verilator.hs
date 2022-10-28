@@ -15,7 +15,7 @@ module TinyBlarney.Backends.Simulation.Verilator (
 
 import TinyBlarney.Core
 import TinyBlarney.Backends.CodeGeneration.Verilog
-import TinyBlarney.Backends.Simulation.SimulatorTypes
+import TinyBlarney.Backends.Simulation.Types
 import TinyBlarney.Backends.Simulation.Verilator.GenTop
 
 import qualified Data.Map as M

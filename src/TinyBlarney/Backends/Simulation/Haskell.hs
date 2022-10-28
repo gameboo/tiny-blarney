@@ -11,7 +11,7 @@ module TinyBlarney.Backends.Simulation.Haskell (
 ) where
 
 import TinyBlarney.Core
-import TinyBlarney.Backends.Simulation.SimulatorTypes
+import TinyBlarney.Backends.Simulation.Types
 
 import Data.Map
 
