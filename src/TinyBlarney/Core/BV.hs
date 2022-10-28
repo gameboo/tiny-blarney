@@ -9,8 +9,8 @@ module TinyBlarney.Core.BV (
   BV (..)
 , prettyBV
 , PathAndBV
-, bvBitWidth
-, unsafeBVBitWidth
+, bitWidthBV
+, unsafeBitWidthBV
 , mkConstantBV
 , mkDontCareBV
 , mkAndBV
@@ -75,12 +75,12 @@ instance Show BV where
 
 type PathAndBV = (CircuitInterfacePath, BV)
 
-bvBitWidth :: BV -> Maybe BitWidth
-bvBitWidth bv = queryCircuitInterfaceAt getPortOutBitWidth ifc bv.exposedPath
+bitWidthBV :: BV -> Maybe BitWidth
+bitWidthBV bv = queryCircuitInterfaceAt getPortOutBitWidth ifc bv.exposedPath
   where ifc = primInterface bv.primitive
 
-unsafeBVBitWidth :: BV -> BitWidth
-unsafeBVBitWidth bv = fromMaybe failure $ bvBitWidth bv
+unsafeBitWidthBV :: BV -> BitWidth
+unsafeBitWidthBV bv = fromMaybe failure $ bitWidthBV bv
   where failure = err $ "could not extract BitWidth for "
                         ++ show bv.exposedPath ++ " in " ++ show ifc
         ifc = primInterface bv.primitive
@@ -117,24 +117,24 @@ mkDontCareBV :: BitWidth -> BV
 mkDontCareBV w = head $ mkPrimitive (DontCare w) []
 
 mkAndBV :: BV -> BV -> BV
-mkAndBV x y = mkBinOpBV (And $ unsafeBVBitWidth x) x y
+mkAndBV x y = mkBinOpBV (And $ unsafeBitWidthBV x) x y
 
 mkOrBV :: BV -> BV -> BV
-mkOrBV x y = mkBinOpBV (Or $ unsafeBVBitWidth x) x y
+mkOrBV x y = mkBinOpBV (Or $ unsafeBitWidthBV x) x y
 
 mkXorBV :: BV -> BV -> BV
-mkXorBV x y = mkBinOpBV (Xor $ unsafeBVBitWidth x) x y
+mkXorBV x y = mkBinOpBV (Xor $ unsafeBitWidthBV x) x y
 
 mkInvertBV :: BV -> BV
-mkInvertBV x = mkUnOpBV (Invert $ unsafeBVBitWidth x) x
+mkInvertBV x = mkUnOpBV (Invert $ unsafeBitWidthBV x) x
 
 mkConcatBV :: BV -> BV -> BV
 mkConcatBV x y = mkBinOpBV (Concatenate wx wy) x y
-  where wx = unsafeBVBitWidth x
-        wy = unsafeBVBitWidth y
+  where wx = unsafeBitWidthBV x
+        wy = unsafeBitWidthBV y
 
 mkSliceBV :: (Int, Int) -> BV -> BV
-mkSliceBV (hi, lo) x = mkUnOpBV (Slice (hi, lo) $ unsafeBVBitWidth x) x
+mkSliceBV (hi, lo) x = mkUnOpBV (Slice (hi, lo) $ unsafeBitWidthBV x) x
 
 mkCustomBV :: Circuit -> [PathAndBV] -> [BV]
 mkCustomBV circuit rcvSigs = mkPrimitive (Custom circuit) rcvSigs

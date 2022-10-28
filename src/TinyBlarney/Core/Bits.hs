@@ -158,7 +158,7 @@ instance KnownNat n => Bits (Bit n) where
   getExternalInterface (Just name) _ = metaNameHint name $ Port Out (valueOf @n)
   getExternalInterface Nothing _ = Port Out $ valueOf @n
   toBVs x = [x.bv]
-  fromBVs (bv:bvs) | unsafeBVBitWidth bv == valueOf @n = (AsBit bv, bvs)
+  fromBVs (bv:bvs) | unsafeBitWidthBV bv == valueOf @n = (AsBit bv, bvs)
 
 instance Bits ()
 instance (Bits a, Bits b) => Bits (a, b)

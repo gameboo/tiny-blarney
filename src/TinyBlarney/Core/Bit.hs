@@ -51,7 +51,7 @@ newtype Bit (n :: Nat) = AsBit { bv :: BV }
 
 -- | Get the size of a 'Bit n' without relying on its type
 unsafeWidthOf :: Bit n -> Int
-unsafeWidthOf = unsafeBVBitWidth . bv
+unsafeWidthOf = unsafeBitWidthBV . bv
 
 -- | Constant of an explicitly user-provided width
 unsafeBitConstant :: Integer -> Int -> Bit n
