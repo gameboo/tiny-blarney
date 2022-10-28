@@ -1,4 +1,6 @@
 {-# LANGUAGE DataKinds           #-}
+{-# LANGUAGE TypeFamilies        #-}
+{-# LANGUAGE BlockArguments      #-}
 {-# LANGUAGE OverloadedRecordDot #-}
 
 {- |
@@ -14,7 +16,12 @@ type.
 
 module TinyBlarney.Core.Bit (
   Bit (..)
-, valueOf
+, evaluateBit
+, unsafeEvaluateBit
+, bitNToInteger
+, unsafeBitNToInteger
+, bitNFromInteger
+, unsafeBitNFromInteger
 , unsafeWidthOf
 , unsafeBitConstant
 , bitConstant
@@ -39,8 +46,13 @@ module TinyBlarney.Core.Bit (
 
 import TinyBlarney.Misc.Misc
 import TinyBlarney.Core.BV
+import TinyBlarney.Core.BasicTypes
 
+import Foreign
+import Data.Maybe
+import Data.Ratio
 import GHC.TypeLits
+import Control.Monad
 
 -- | local error helper function
 err :: String -> a
@@ -48,6 +60,38 @@ err m = error $ "TinyBlarney.Core.Bit: " ++ m
 
 -- | Type representing a sized bit vector
 newtype Bit (n :: Nat) = AsBit { bv :: BV }
+
+-- | Evaluate a 'Bit n' to an 'Integer' value if possible
+evaluateBit :: Bit n -> Maybe Integer
+evaluateBit (AsBit bv) = evaluateBV bv
+
+-- | Evaluate a 'Bit n' to an 'Integer' value or gives an error
+unsafeEvaluateBit :: Bit n -> Integer
+unsafeEvaluateBit (AsBit bv) = unsafeEvaluateBV bv
+
+bitNToInteger :: Bit n -> Maybe Integer
+bitNToInteger = evaluateBit
+
+unsafeBitNToInteger :: Bit n -> Integer
+unsafeBitNToInteger = unsafeEvaluateBit
+
+bitNFromInteger :: KnownNat n => Integer -> Bit n
+bitNFromInteger = bitConstant
+
+unsafeBitNFromInteger :: Integer -> Int -> Bit n
+unsafeBitNFromInteger = unsafeBitConstant
+
+instance KnownNat n => Storable (Bit n) where
+  sizeOf x = ceilDiv (valueOf @n) 8
+  alignment _ = 0
+  peek ptr = do
+    words :: [Word8] <- forM [0 .. (ceilDiv (valueOf @n) 8 ) - 1]
+                             \idx -> peek $ ptr `plusPtr` idx
+    return . bitNFromInteger . word8ListToInteger $ words
+  poke ptr x =
+    forM_ (zip [0 .. (ceilDiv (valueOf @n) 8 ) - 1]
+               (integerToWord8List $ unsafeBitNToInteger x))
+          \(idx, word) -> poke (ptr `plusPtr` idx) word
 
 -- | Get the size of a 'Bit n' without relying on its type
 unsafeWidthOf :: Bit n -> Int
