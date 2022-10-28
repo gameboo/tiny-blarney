@@ -21,13 +21,16 @@ module TinyBlarney.Core.BV (
 , mkSliceBV
 , mkCustomBV
 , mkInterfaceBV
+, evaluateBV
+, unsafeEvaluateBV
 ) where
 
 import TinyBlarney.Core.BasicTypes
 
 import Data.Maybe
-import Prelude hiding ((<>))
+import Control.Monad
 import Text.PrettyPrint
+import Prelude hiding ((<>))
 
 -- For Observable Sharing
 import Data.IORef
@@ -138,3 +141,12 @@ mkCustomBV circuit rcvSigs = mkPrimitive (Custom circuit) rcvSigs
 
 mkInterfaceBV :: CircuitInterface -> [PathAndBV] -> [BV]
 mkInterfaceBV ifc rcvSigs = mkPrimitive (Interface ifc) rcvSigs
+
+evaluateBV :: BV -> Maybe Integer
+evaluateBV bv = do let (ps, xs) = unzip bv.receivedSignals
+                   xs' <- forM xs evaluateBV
+                   primEvalFirst bv.primitive (zip ps xs')
+
+unsafeEvaluateBV :: BV -> Integer
+unsafeEvaluateBV bv = fromMaybe fail $ evaluateBV bv
+  where fail = err $ "cannot evaluate " ++ show bv
