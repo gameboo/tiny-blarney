@@ -38,6 +38,7 @@ module TinyBlarney.Core.CircuitInterface (
 , getPorts
 , getPortInsInfo
 , getPortInPaths
+, getPortInWidths
 , getPortOutsInfo
 , getPortOutPaths
 , getPortOutWidths
@@ -271,10 +272,13 @@ getPorts ifc =
   where exposePort p@(Port _ _) = Just p
         exposePort _ = Nothing
 
+-- Input ports
+--------------
+
 -- | Get all input ports information in a 'CircuitInterface'
 getPortInsInfo :: CircuitInterface -> [(CircuitInterfacePath, BitWidth)]
 getPortInsInfo ifc =
-  [ (x, y) | (x, Just y) <- queryCircuitInterfaceLeaves exposePortIn ifc]
+  [ (x, y) | (x, Just y) <- queryCircuitInterfaceLeaves exposePortIn ifc ]
   where exposePortIn (Port In w) = Just w
         exposePortIn _ = Nothing
 
@@ -282,10 +286,17 @@ getPortInsInfo ifc =
 getPortInPaths :: CircuitInterface -> [CircuitInterfacePath]
 getPortInPaths = fst . unzip . getPortInsInfo
 
+-- | Get all input ports widths in a 'CircuitInterface'
+getPortInWidths :: CircuitInterface -> [BitWidth]
+getPortInWidths = snd . unzip . getPortInsInfo
+
+-- Output ports
+---------------
+
 -- | Get all output ports information in a 'CircuitInterface'
 getPortOutsInfo :: CircuitInterface -> [(CircuitInterfacePath, BitWidth)]
 getPortOutsInfo ifc =
-  [ (x, y) | (x, Just y) <- queryCircuitInterfaceLeaves exposePortOut ifc]
+  [ (x, y) | (x, Just y) <- queryCircuitInterfaceLeaves exposePortOut ifc ]
   where exposePortOut (Port Out w) = Just w
         exposePortOut _ = Nothing
 
@@ -294,8 +305,5 @@ getPortOutPaths :: CircuitInterface -> [CircuitInterfacePath]
 getPortOutPaths = fst . unzip . getPortOutsInfo
 
 -- | Get all output ports widths in a 'CircuitInterface'
-getPortOutWidths :: CircuitInterface -> [(CircuitInterfacePath, BitWidth)]
-getPortOutWidths ifc =
-  [ (x, y) | (x, Just y) <- queryCircuitInterfaceLeaves exposePortOutW ifc ]
-  where exposePortOutW (Port Out w) = Just w
-        exposePortOutW _ = Nothing
+getPortOutWidths :: CircuitInterface -> [BitWidth]
+getPortOutWidths = snd . unzip . getPortOutsInfo
