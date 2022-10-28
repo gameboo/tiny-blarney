@@ -1,3 +1,4 @@
+{-# LANGUAGE LambdaCase            #-}
 {-# LANGUAGE RecordWildCards       #-}
 {-# LANGUAGE OverloadedRecordDot   #-}
 {-# LANGUAGE DuplicateRecordFields #-}
@@ -47,16 +48,20 @@ module TinyBlarney.Core.BasicTypes (
 , primOutputWidths
 , primOutputPaths
 , primPretty
+, primEval
+, primEvalFirst
 , ifcUnaryOp
 , ifcBinaryOp
 ) where
 
 import Data.List
+import Data.Bits hiding (And, Xor)
 import Data.Array
 import qualified Data.Map as M
 import Text.PrettyPrint hiding ((<>))
 import qualified Text.PrettyPrint as PP ((<>))
 
+import TinyBlarney.Misc.Misc
 import TinyBlarney.Core.CircuitInterface
 
 -- | local error helper function
@@ -310,6 +315,10 @@ data PrimitiveInfo = PrimitiveInfo {
   interface :: CircuitInterface
   -- | The pretty printing 'Doc' for the primitive.
 , prettyDoc :: Doc
+  -- | Evaluate the primitive given integer input values, and return a list of
+  --   evaluated outputs or an empty list if evaluation is not possible.
+, evaluate :: [(CircuitInterfacePath, Integer)]
+           -> [(CircuitInterfacePath, Integer)]
 }
 
 -- | Get the 'CircuitInterface' of a 'Primitive'.
@@ -344,6 +353,17 @@ primOutputPaths = map fst . primOutputsInfo
 primPretty :: Primitive -> Doc
 primPretty = prettyDoc . primInfo
 
+-- | Evaluate a 'Primitive'.
+primEval :: Primitive -> (    [(CircuitInterfacePath, Integer)]
+                           -> [(CircuitInterfacePath, Integer)] )
+primEval = evaluate . primInfo
+
+-- | Evaluate the first output of a 'Primitive'.
+primEvalFirst :: Primitive
+              -> ([(CircuitInterfacePath, Integer)] -> Maybe Integer)
+primEvalFirst p = \ins -> case primEval p ins of (_, x):xs -> Just x
+                                                 _ -> Nothing
+
 -- | 'CircuitInterface' for 1-input 1-output circuits a.k.a. unary op.
 ifcUnaryOp :: BitWidth -> BitWidth -> CircuitInterface
 ifcUnaryOp wIn wOut =
@@ -365,46 +385,72 @@ pDoc :: Doc -> CircuitInterface -> Doc
 pDoc d ifc =
   text "Prim " <> braces (sep [d, parens $ prettyCircuitInterface ifc])
 
+-- local helper to grab the first output path of an interface
+outPath :: CircuitInterface -> CircuitInterfacePath
+outPath = head . getPortOutPaths
+
 -- | document 'PrimitiveInfo' for any 'Primitive'
 primInfo :: Primitive -> PrimitiveInfo
 primInfo (Constant k w) = PrimitiveInfo {
   interface = ifc
 , prettyDoc = pDoc (text "Constant " <+> integer k) ifc
+, evaluate = \_ -> [(outPath ifc, toInteger k)]
 } where ifc = metaNameHint "out" $ Port Out w
 primInfo (DontCare w) = PrimitiveInfo {
   interface = ifc
 , prettyDoc = pDoc (text "DontCare") ifc
+, evaluate = \_ -> [(outPath ifc, 0)]
 } where ifc = metaNameHint "out" $ Port Out w
 primInfo (And w) = PrimitiveInfo {
   interface = ifc
 , prettyDoc = pDoc (text "And") ifc
+, evaluate = \case
+    [(_, x), (_, y)] -> [(outPath ifc, x .&. y)]
+    _ -> []
 } where ifc = ifcBinaryOp w w w
 primInfo (Or w) = PrimitiveInfo {
   interface = ifc
 , prettyDoc = pDoc (text "Or") ifc
+, evaluate = \case
+    [(_, x), (_, y)] -> [(outPath ifc, x .|. y)]
+    _ -> []
 } where ifc = ifcBinaryOp w w w
 primInfo (Xor w) = PrimitiveInfo {
   interface = ifc
 , prettyDoc = pDoc (text "Xor") ifc
+, evaluate = \case
+    [(_, x), (_, y)] -> [(outPath ifc, x `xor` y)]
+    _ -> []
 } where ifc = ifcBinaryOp w w w
 primInfo (Invert w) = PrimitiveInfo {
   interface = ifc
 , prettyDoc = pDoc (text "Invert") ifc
+, evaluate = \case
+    [(_, x)] -> [(outPath ifc, complement x)]
+    _ -> []
 } where ifc = ifcUnaryOp w w
 primInfo (Concatenate w0 w1) = PrimitiveInfo {
   interface = ifc
 , prettyDoc = pDoc (text "Concatenate") ifc
+, evaluate = \case
+    [(_, x), (_, y)] -> [(outPath ifc, x `shiftL` w1 .|. y)]
+    _ -> []
 } where ifc = ifcBinaryOp w0 w1 (w0+w1)
 primInfo (Slice (hi, lo) w) = PrimitiveInfo {
   interface = ifc
 , prettyDoc =
     pDoc (text "Slice" PP.<> parens (int hi PP.<> comma <+> int lo)) ifc
+, evaluate = \case
+    [(_, x)] -> [(outPath ifc, clamp (hi + 1) x `shiftR` lo)]
+    _ -> []
 } where ifc = ifcUnaryOp w (hi-lo+1)
 primInfo (Custom circuit) = PrimitiveInfo {
   interface = circuit.interface
 , prettyDoc = text "Prim Custom: " <+> prettyCircuit circuit
+, evaluate = \_ -> []
 }
 primInfo (Interface ifc) = PrimitiveInfo {
   interface = ifc
 , prettyDoc = pDoc (text "Interface") ifc
+, evaluate = \_ -> []
 }
