@@ -7,6 +7,10 @@ extern "C" {
 
 #define DIVCEIL(x, y) (1 + ((x - 1) / y))
 
+void *bitmemcpy( void *destArg, const size_t destBitOffset
+               , const void *srcArg, const size_t srcBitOffset
+               , const size_t bitLen );
+
 typedef struct {
   char* pathname;
   int fd;

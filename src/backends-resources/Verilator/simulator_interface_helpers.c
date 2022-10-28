@@ -15,6 +15,43 @@ extern "C" {
 
 #include "simulator_interface_helpers.h"
 
+// bit-granularity mem copy function
+////////////////////////////////////
+#define _MASK8LO(N) (~(0xff<<(N)))
+#define _MASK8HI(N) (~(0xff>>(N)))
+void *bitmemcpy( void *destArg, const size_t destBitOffset
+               , const void *srcArg, const size_t srcBitOffset
+               , const size_t bitLen ) {
+  size_t completeBytes = bitLen / 8;
+  size_t overflowBits = bitLen % 8;
+  uint8_t* dest = (uint8_t*) destArg;
+  uint8_t* src = (uint8_t*) srcArg;
+  if (destBitOffset == 0 && srcBitOffset == 0) {
+    memcpy (dest, src, completeBytes);
+    if (overflowBits)
+      dest[completeBytes] = src[completeBytes] & _MASK8LO(overflowBits);
+  }
+  else {
+    int i = 0;
+    uint8_t tmp = 0;
+    do {
+      tmp = src[i];
+      if (srcBitOffset) {
+        tmp >>= srcBitOffset;
+        tmp  |= src[i+1] << (8-srcBitOffset);
+      }
+      dest[i] &= _MASK8LO(destBitOffset);
+      dest[i] |= tmp << destBitOffset;
+      if (destBitOffset) {
+        dest[i+1] &= _MASK8HI(8-destBitOffset);
+        dest[i+1] |= tmp >> (8-destBitOffset);
+      }
+      i++;
+    } while (i < completeBytes);
+  }
+  return dest;
+}
+
 // create path
 //////////////
 static int create_dir_path (char const *path, mode_t mode) {
