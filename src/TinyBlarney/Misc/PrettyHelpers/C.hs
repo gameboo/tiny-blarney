@@ -20,6 +20,10 @@ module TinyBlarney.Misc.PrettyHelpers.C (
 , cDirectAccess
 , cIndirectAccess
 , cFor
+, cMalloc
+, cFree
+, cMemCpy
+--
 , cWhile
 , cDoWhile
 , cSwitch
@@ -87,6 +91,17 @@ cDirectAccess obj field = text obj <> char '.' <> text field
 
 cIndirectAccess :: CIdent -> CIdent -> CExpr
 cIndirectAccess obj field = text obj <> text "->" <> text field
+
+cMalloc :: CExpr -> CExpr
+cMalloc sz = cFunCall (text "malloc") [sz]
+
+cFree :: CExpr -> CExpr
+cFree ptr = cFunCall (text "free") [ptr]
+
+cMemCpy :: CExpr -> CExpr -> CExpr -> CExpr
+cMemCpy dst src len = cFunCall (text "memcpy") [ cCast "void*" dst
+                                               , cCast "void*" src
+                                               , len ]
 
 -- C statements
 --------------------------------------------------------------------------------
