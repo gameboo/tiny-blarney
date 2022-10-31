@@ -23,6 +23,7 @@ module TinyBlarney.Backends.Simulation.Verilator.Communication (
 , SimResult
 , pattern Evaluated
 , pattern Finished
+, pattern Unknown
 , receiveSimRsps
 ) where
 
@@ -120,6 +121,9 @@ pattern Finished = 0x00
 -- | Result indicating the evaluated output signals for the last simulation step
 pattern Evaluated :: SimResult
 pattern Evaluated = 0x01
+-- | Result indicating an unknown command
+pattern Unknown :: SimResult
+pattern Unknown = 0x02
 
 -- | 'Storable' instance for 'SimRsp a'
 instance Storable a => Storable (SimRsp a) where
