@@ -1,10 +1,12 @@
-{-# LANGUAGE DataKinds      #-}
-{-# LANGUAGE DeriveGeneric  #-}
-{-# LANGUAGE BlockArguments #-}
-{-# LANGUAGE DeriveAnyClass #-}
+{-# LANGUAGE DataKinds           #-}
+{-# LANGUAGE DeriveGeneric       #-}
+{-# LANGUAGE BlockArguments      #-}
+{-# LANGUAGE DeriveAnyClass      #-}
+{-# LANGUAGE OverloadedRecordDot #-}
 
 import TinyBlarney
 
+import Data.Map
 import GHC.Generics
 import Control.Monad
 
@@ -54,5 +56,14 @@ main = do
   putStrLn "--------------------------------------------------"
   sim <- buildSimulatorWith (Just Verilog) c
   putStrLn "simulator built"
-  where c = buildCircuit "carryChainAdder" $ carryChainAdder @4
+  putStrLn "--------------------------------------------------"
+  let cInSig = zip [0..10] (repeat 0)
+  let xSig = zip [0..10] [0..10]
+  let ySig = zip [0..10] [0..10] -- [y * 10 | y <- [0..10]]
+  let simIns = fromList (zip (getPortInPaths c.interface) [cInSig, xSig, ySig])
+  --let simIns = mempty
+  putStrLn $ "Stimulus: " ++ show simIns
+  simOuts <- simulate sim simIns
+  putStrLn $ show simOuts
+  where c = buildCircuit "carryChainAdder" $ carryChainAdder @8
         vs = generateVerilog c
