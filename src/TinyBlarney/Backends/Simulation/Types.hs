@@ -16,6 +16,7 @@ module TinyBlarney.Backends.Simulation.Types (
 , AllSimulationOutputs (..)
 , PureSimulator
 , Simulator
+, Simulatable (..)
 ) where
 
 import Data.Map
