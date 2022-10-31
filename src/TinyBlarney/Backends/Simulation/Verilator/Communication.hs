@@ -89,7 +89,7 @@ instance Storable a => Storable (SimReq a) where
 -- | Send a single 'SimReq a' into the provided 'Handle' to the input to a
 --   TinyBlarney verilator simulation process
 sendSimReq :: Storable a => Handle -> SimReq a -> IO ()
-sendSimReq h req = with req \ptr -> hPutBuf h ptr (sizeOf req)
+sendSimReq h req = with req \ptr -> hPutBuf h ptr (sizeOf req) >> hFlush h
 
 -- | Send a sequence of 'SimReq a's into the provided 'Handle' to the input to a
 --   TinyBlarney verilator simulation process
@@ -99,10 +99,9 @@ sendSimReqs h reqs = do
   -- (prefer malloc+free to alloca for multiple reuses between commands)
   ptr <- malloc
   -- prepare and push out each command
-  forM_ reqs \req -> do
-    poke ptr req
-    hPutBuf h ptr (sizeOf req)
+  forM_ reqs \req -> poke ptr req >> hPutBuf h ptr (sizeOf req)
   -- free allocate memory once all commands are handled
+  hFlush h
   free ptr
 
 --------------------------------------------------------------------------------
