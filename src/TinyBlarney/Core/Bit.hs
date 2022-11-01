@@ -61,6 +61,16 @@ err m = error $ "TinyBlarney.Core.Bit: " ++ m
 -- | Type representing a sized bit vector
 newtype Bit (n :: Nat) = AsBit { bv :: BV }
 
+-- | 'Num' instance for 'Bit n'
+instance KnownNat n => Num (Bit n) where
+  (+) = bitAdd
+  (-) = bitSub
+  (*) = bitMul
+  negate x = bitInvert x `bitAdd` 1
+  abs = id
+  signum _ = 1
+  fromInteger = bitConstant
+
 -- | Evaluate a 'Bit n' to an 'Integer' value if possible
 evaluateBit :: Bit n -> Maybe Integer
 evaluateBit (AsBit bv) = evaluateBV bv
@@ -156,6 +166,18 @@ bitXor x y = AsBit $ mkXorBV x.bv y.bv
 -- | @bitInvert x@ returns the ones' complement of @x@
 bitInvert :: Bit n -> Bit n
 bitInvert x = AsBit $ mkInvertBV x.bv
+
+-- | @bitAdd x y@ returns the sum of @x@ and @y@
+bitAdd :: Bit n -> Bit n -> Bit n
+bitAdd x y = error "bitAdd not implemented"
+
+-- | @bitSub x y@ returns the substraction @x - y@
+bitSub :: Bit n -> Bit n -> Bit n
+bitSub x y = error "bitSub not implemented"
+
+-- | @bitMul x y@ returns the product @x * y@
+bitMul :: Bit n -> Bit n -> Bit n
+bitMul x y = error "bitMul not implemented"
 
 -- | @bitConcat x y@ returns the concatenation of @x@ above @y@
 bitConcat :: Bit n -> Bit m -> Bit (n+m)
