@@ -104,15 +104,12 @@ buildSimulatorWithVerilator c = do
     putStrLn $ "  simulator generated: " ++ simPath
     return simPath
   return \ins-> do
-    putStrLn "spawning verilator simulation"
     -- spawn the verilator simulator and open communication channels
     pHandle <- spawnProcess verilatorSim []
     usleep 1500000
     reqSink <- openFile "simReqSink" WriteMode
     rspSource <- openFile "simRspSource" ReadMode
-    putStrLn "verilator simulation spawned"
     -- wire up the inputs
-    putStrLn $ "preparing sim inputs from " ++ show ins
     let insWidths = getPortInWidths c.interface
     let sigs = M.elems ins
     liftNat (sum insWidths) \(_ :: Proxy n) -> do
@@ -124,21 +121,17 @@ buildSimulatorWithVerilator c = do
                         (sum ws) }
       let reqs :: [SimReq (Bit n)] = (buildReq insWidths <$>) . transpose $ sigs
       -- enque all inputs
-      putStrLn $ "sending all (" ++ show (length reqs) ++ ")"
       sendSimReqs reqSink reqs
       -- then enque a kill command
       let finishReq :: SimReq (Bit n) = SimReq {
             simCmd = Finish
           , simTime = (last reqs).simTime + 1
           , payload = bitNFromInteger 0 }
-      putStrLn "sending finish req"
       sendSimReq reqSink finishReq
     -- wire up the outputs
-    putStrLn "preparing to receive outputs"
     let outsWidths = getPortOutWidths c.interface
     outSigs <- liftNat (sum outsWidths) \(_ :: Proxy n) -> do
       rsps :: [SimRsp (Bit n)] <- receiveSimRsps rspSource
-      putStrLn "outputs received"
       let extractRsp ws simRsp =
             zip (repeat simRsp.simTime)
                 (sizeListIntegerToList ws (unsafeBitNToInteger simRsp.payload))
