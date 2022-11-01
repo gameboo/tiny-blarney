@@ -19,11 +19,14 @@ module TinyBlarney.Misc.PrettyHelpers.C (
 , cOrAccum
 , cDirectAccess
 , cIndirectAccess
-, cFor
+, cLineComment
+, cBlockComment
 , cMalloc
 , cFree
 , cMemCpy
+, cPrintf
 --
+, cFor
 , cWhile
 , cDoWhile
 , cSwitch
@@ -92,6 +95,12 @@ cDirectAccess obj field = text obj <> char '.' <> text field
 cIndirectAccess :: CIdent -> CIdent -> CExpr
 cIndirectAccess obj field = text obj <> text "->" <> text field
 
+cLineComment :: String -> CExpr
+cLineComment m = text "//" <+> text m
+
+cBlockComment :: [String] -> CExpr
+cBlockComment ms = text "/*" $$ (nest 2 . vcat . fmap text $ ms) $$ text "*/"
+
 cMalloc :: CExpr -> CExpr
 cMalloc sz = cFunCall (text "malloc") [sz]
 
@@ -102,6 +111,9 @@ cMemCpy :: CExpr -> CExpr -> CExpr -> CExpr
 cMemCpy dst src len = cFunCall (text "memcpy") [ cCast "void*" dst
                                                , cCast "void*" src
                                                , len ]
+
+cPrintf :: String -> [CExpr] -> CExpr
+cPrintf fmt args = cFunCall (text "printf") $ (doubleQuotes $ text fmt) : args
 
 -- C statements
 --------------------------------------------------------------------------------
