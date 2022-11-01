@@ -62,8 +62,8 @@ main = do
   let ySig = zip [0..10] [0..10] -- [y * 10 | y <- [0..10]]
   let simIns = fromList (zip (getPortInPaths c.interface) [cInSig, xSig, ySig])
   --let simIns = mempty
-  putStrLn $ "Stimulus: " ++ show simIns
+  putStrLn $ "Simulate with inputs: " ++ show simIns
   simOuts <- simulate sim simIns
-  putStrLn $ show simOuts
-  where c = buildCircuit "carryChainAdder" $ carryChainAdder @8
+  putStrLn $ "Got simulated outputs: " ++ show simOuts
+  where c = buildCircuit "carryChainAdder" $ carryChainAdder @4
         vs = generateVerilog c
