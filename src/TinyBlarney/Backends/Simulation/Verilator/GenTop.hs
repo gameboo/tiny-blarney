@@ -100,19 +100,15 @@ defMain topT inPorts outPorts =
           , cDef ("bool", "done") (Just $ text "false")
           , cWhile (cNot . cOrs $ [ text "done"
                                   , cFunCall (text "Verilated::gotFinish") [] ])
-                   [ cPrintf ">>> waiting for cmd\\n" [] <> semi
-                   , deqInChannel "simReq"
+                   [ deqInChannel "simReq"
                    , cMemCpy (text "simRsp + 1")
                              (text "simReq + 1")
                              (int 8) <> semi
-                   , cPrintf ">>> prepared rsp\\n" [] <> semi
                    , cSwitch (cDeref $ cCast "uint8_t*" (text "simReq"))
                              [ (int $ fromIntegral Evaluate, handleEvalCmd)
                              , (int $ fromIntegral Finish, handleFinishCmd) ]
                              (Just handleUnknownCmd)
-                   , cPrintf ">>> sending back rsp\\n" [] <> semi
                    , enqOutChannel "simRsp" ]
-          , cPrintf ">>> done simulating\\n" [] <> semi
           , destroyInChannel
           , destroyOutChannel
           , cFree (text "simRsp") <> semi
@@ -140,9 +136,7 @@ defMain topT inPorts outPorts =
     ptrBufAt nm n = text nm <+> char '+' <+> int n
     -- event handles
     handleEvalCmd = [
-        cDef ("static int", "n") (Just $ int 0)
-      , cPrintf ">>> eval cmd %d\\n" [text "n"] <> semi
-      , cFunCall (text "inputAssigns")
+        cFunCall (text "inputAssigns")
                  [ text "top", ptrBufAt "simReq" 9 ] <> semi
       , cFunCall (cIndirectAccess "top" "eval") [] <> semi
       , cAssign (cDeref $ ptrBufAt "simRsp" 0)
@@ -152,15 +146,13 @@ defMain topT inPorts outPorts =
       , text "break" <> semi
       ]
     handleFinishCmd = [
-        cPrintf ">>> finish cmd\\n" [] <> semi
-      , cAssign (cDeref $ ptrBufAt "simRsp" 0)
+        cAssign (cDeref $ ptrBufAt "simRsp" 0)
                 (int $ fromIntegral Finished) <> semi
       , cAssign (text "done") (text "true") <> semi
       , text "break" <> semi
       ]
     handleUnknownCmd = [
-        cPrintf ">>> unknown cmd\\n" [] <> semi
-      , cAssign (cDeref $ ptrBufAt "simRsp" 0)
+        cAssign (cDeref $ ptrBufAt "simRsp" 0)
                 (int $ fromIntegral Unknown) <> semi
       , cAssign (text "done") (text "true") <> semi
       , text "break" <> semi
