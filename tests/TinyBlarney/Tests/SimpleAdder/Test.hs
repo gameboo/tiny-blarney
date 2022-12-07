@@ -2,8 +2,12 @@
 {-# LANGUAGE DeriveGeneric       #-}
 {-# LANGUAGE BlockArguments      #-}
 {-# LANGUAGE DeriveAnyClass      #-}
+{-# LANGUAGE DuplicateRecordFields #-}
 {-# LANGUAGE OverloadedRecordDot #-}
 
+module TinyBlarney.Tests.SimpleAdder.Test (test) where
+
+import Distribution.TestSuite
 import TinyBlarney
 
 import Data.Map
@@ -48,22 +52,30 @@ carryChainAdder :: Bit 1 -> Bit n -> Bit n -> AdderRes n
 carryChainAdder cIn x y =
   (\(sum, carry) -> AdderRes sum carry) $ rawCarryChainAdder cIn x y
 
-main:: IO ()
-main = do
-  putStrLn $ show c
-  putStrLn "--------------------------------------------------"
-  forM_ vs \v -> putStrLn v
-  putStrLn "--------------------------------------------------"
-  sim <- buildSimulatorWith (Just Verilog) c
-  putStrLn "simulator built"
-  putStrLn "--------------------------------------------------"
-  let cInSig = zip [0..10] (repeat 0)
-  let xSig = zip [0..10] [0..10]
-  let ySig = zip [0..10] [0..10] -- [y * 10 | y <- [0..10]]
-  let simIns = fromList (zip (getPortInPaths c.interface) [cInSig, xSig, ySig])
-  --let simIns = mempty
-  putStrLn $ "Simulate with inputs: " ++ show simIns
-  simOuts <- simulate sim simIns
-  putStrLn $ "Got simulated outputs: " ++ show simOuts
-  where c = buildCircuit "carryChainAdder" $ carryChainAdder @4
+test :: TestInstance
+test = TestInstance {
+    run = do putStrLn "building circuit"
+             putStrLn $ show c
+             putStrLn "--------------------------------------------------"
+             forM_ vs \v -> putStrLn v
+             putStrLn "--------------------------------------------------"
+             sim <- buildSimulatorWith (Just Verilog) c
+             putStrLn "simulator built"
+             putStrLn "--------------------------------------------------"
+             let cInSig = zip [0..10] (repeat 0)
+             let xSig = zip [0..10] [0..10]
+             let ySig = zip [0..10] [0..10] -- [y * 10 | y <- [0..10]]
+             let simIns = fromList (zip (getPortInPaths c.interface)
+                                   [cInSig, xSig, ySig])
+             --let simIns = mempty
+             putStrLn $ "Simulate with inputs: " ++ show simIns
+             simOuts <- simulate sim simIns
+             putStrLn $ "Got simulated outputs: " ++ show simOuts
+             return $ Finished Pass
+  , name = "test mkAndABOrC"
+  , tags = []
+  , options = []
+  , setOption = \_ _ -> Right test
+  }
+  where c = buildCircuit "carryChainAdder" (carryChainAdder @4)
         vs = generateVerilog c

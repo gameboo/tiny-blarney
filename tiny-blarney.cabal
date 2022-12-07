@@ -1,0 +1,68 @@
+cabal-version:      3.0
+name:               tiny-blarney
+version:            0.1.0.0
+
+
+library tiny-blarney-core
+  default-language: GHC2021
+  hs-source-dirs: src
+  exposed-modules: TinyBlarney.Core
+  other-modules:
+      TinyBlarney.Core.BV
+    , TinyBlarney.Core.BasicTypes
+    , TinyBlarney.Core.Bit
+    , TinyBlarney.Core.Bits
+    , TinyBlarney.Core.BuildCircuit
+    , TinyBlarney.Core.CircuitInterface
+    , TinyBlarney.Core.FlattenBV
+    , TinyBlarney.Core.NetHelpers
+    , TinyBlarney.Misc.Misc
+  build-depends: base, containers, pretty, array, mtl
+
+library
+  default-language: GHC2021
+  hs-source-dirs: src
+  exposed-modules: TinyBlarney, TinyBlarney.Backends
+  other-modules:
+      TinyBlarney.Backends.CodeGeneration.SMT
+    , TinyBlarney.Backends.CodeGeneration.Verilog
+    , TinyBlarney.Backends.Simulation.Haskell
+    , TinyBlarney.Backends.Simulation.SimulatorBuild
+    , TinyBlarney.Backends.Simulation.Types
+    , TinyBlarney.Backends.Simulation.Verilator
+    , TinyBlarney.Backends.Simulation.Verilator.Communication
+    , TinyBlarney.Backends.Simulation.Verilator.GenTop
+    , TinyBlarney.Backends.Verification.SMT
+    , TinyBlarney.Core
+    , TinyBlarney.Core.BV
+    , TinyBlarney.Core.BasicTypes
+    , TinyBlarney.Core.Bit
+    , TinyBlarney.Core.Bits
+    , TinyBlarney.Core.BuildCircuit
+    , TinyBlarney.Core.CircuitInterface
+    , TinyBlarney.Core.FlattenBV
+    , TinyBlarney.Core.NetHelpers
+    , TinyBlarney.Misc.Misc
+    , TinyBlarney.Misc.PrettyHelpers.C
+    , TinyBlarney.Misc.PrettyHelpers.Verilog
+  build-depends:
+      tiny-blarney-core
+    , base
+    , containers
+    , pretty
+    , array
+    , mtl
+    , time
+    , unix
+    , process
+    , filepath
+    , directory
+
+test-Suite tiny-blarney-tests
+  default-language: GHC2021
+  hs-source-dirs: tests
+  test-module: TinyBlarney.Tests
+  other-modules:
+      TinyBlarney.Tests.SimpleAndOr.Test
+    , TinyBlarney.Tests.SimpleAdder.Test
+  build-depends: tiny-blarney, Cabal, base, containers
