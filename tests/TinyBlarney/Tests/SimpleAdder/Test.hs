@@ -72,7 +72,7 @@ test = TestInstance {
              simOuts <- simulate sim simIns
              putStrLn $ "Got simulated outputs: " ++ show simOuts
              return $ Finished Pass
-  , name = "test mkAndABOrC"
+  , name = "test carryChainAdder"
   , tags = []
   , options = []
   , setOption = \_ _ -> Right test
