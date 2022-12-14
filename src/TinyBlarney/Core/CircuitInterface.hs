@@ -256,12 +256,9 @@ onCircuitInterfaceLeaves f ifc = go dfltCtxt ifc
 --   sorted on the paths
 queryCircuitInterfaceLeaves :: CircuitInterfaceQuery a -> CircuitInterface
                             -> [(CircuitInterfacePath, Maybe a)]
-queryCircuitInterfaceLeaves query ifc = sortOn fst $ go NoStep query ifc
-  where go stps query (Meta _ x) = go stps query x
-        go stps query (Product xs) =
-          concat [go (stps :|> n) query x | (n, x) <- zip [0..] xs]
-        go stps query x | isCircuitInterfaceLeaf x = [(stps, query x)]
-        go _ _ _ = []
+queryCircuitInterfaceLeaves query ifc =
+  sortOn fst $ onCircuitInterfaceLeaves f ifc
+  where f ctxt = (ctxt.path, query ctxt.ifc)
 
 --------------------------------------------------------------------------------
 
