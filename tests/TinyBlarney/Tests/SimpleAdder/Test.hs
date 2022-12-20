@@ -65,7 +65,7 @@ test = TestInstance {
              let cInSig = zip [0..10] (repeat 0)
              let xSig = zip [0..10] [0..10]
              let ySig = zip [0..10] [0..10] -- [y * 10 | y <- [0..10]]
-             let simIns = fromList (zip (getPortInPaths c.interface)
+             let simIns = fromList (zip (getExplicitPortInPaths c.interface)
                                    [cInSig, xSig, ySig])
              --let simIns = mempty
              putStrLn $ "Simulate with inputs: " ++ show simIns

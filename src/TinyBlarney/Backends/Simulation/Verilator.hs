@@ -110,7 +110,7 @@ buildSimulatorWithVerilator c = do
     reqSink <- openFile "simReqSink" WriteMode
     rspSource <- openFile "simRspSource" ReadMode
     -- wire up the inputs
-    let insWidths = getPortInWidths c.interface
+    let insWidths = getExplicitPortInWidths c.interface
     let sigs = M.elems ins
     liftNat (sum insWidths) \(_ :: Proxy n) -> do
       let buildReq ws xs = SimReq {
@@ -129,7 +129,7 @@ buildSimulatorWithVerilator c = do
           , payload = bitNFromInteger 0 }
       sendSimReq reqSink finishReq
     -- wire up the outputs
-    let outsWidths = getPortOutWidths c.interface
+    let outsWidths = getExplicitPortOutWidths c.interface
     outSigs <- liftNat (sum outsWidths) \(_ :: Proxy n) -> do
       rsps :: [SimRsp (Bit n)] <- receiveSimRsps rspSource
       let extractRsp ws simRsp =
@@ -141,5 +141,5 @@ buildSimulatorWithVerilator c = do
     hClose reqSink
     waitForProcess pHandle
     -- return the output signals
-    let outPaths = getPortOutPaths c.interface
+    let outPaths = getExplicitPortOutPaths c.interface
     return . M.fromList $ zip outPaths outSigs

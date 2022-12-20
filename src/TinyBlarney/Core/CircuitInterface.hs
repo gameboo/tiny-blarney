@@ -1,4 +1,5 @@
 {-# LANGUAGE ViewPatterns        #-}
+{-# LANGUAGE RecordWildCards     #-}
 {-# LANGUAGE PatternSynonyms     #-}
 {-# LANGUAGE OverloadedRecordDot #-}
 
@@ -27,6 +28,7 @@ module TinyBlarney.Core.CircuitInterface (
 , metaInstanceId
 , metaNameHint
 , metaDocString
+, metaImplicit
 , flipPortDir
 , flipCircuitInterface
 , getPortOutBitWidth
@@ -35,16 +37,18 @@ module TinyBlarney.Core.CircuitInterface (
 , onCircuitInterfaceLeaves
 , queryCircuitInterfaceLeaves
   -- * circuit interface leaves queries
-, getPorts
-, getPortInsInfo
-, getPortInPaths
-, getPortInWidths
-, getPortOutsInfo
-, getPortOutPaths
-, getPortOutWidths
+, getExplicitPorts
+, getExplicitPortInsInfo
+, getExplicitPortInPaths
+, getExplicitPortInWidths
+, getExplicitPortOutsInfo
+, getExplicitPortOutPaths
+, getExplicitPortOutWidths
 ) where
 
 import Data.List
+import Data.Proxy
+import GHC.TypeLits
 import Data.Foldable
 import qualified Data.Sequence as Seq
 import Text.PrettyPrint hiding ((<>))
@@ -79,11 +83,11 @@ data CircuitInterface =
 --  | ResetOut IfcName
 
 -- | A type to represent meta information on a 'CircuitInterface'
-data MetaInfo =
-    InstanceId InstanceId
-  | NameHint String
-  | DocString String
-  deriving Show
+data MetaInfo where
+  InstanceId :: InstanceId -> MetaInfo
+  NameHint :: String -> MetaInfo
+  DocString :: String -> MetaInfo
+  Implicit :: String -> MetaInfo
 
 -- | 'CircuitInterface' is a 'Semigroup'
 instance Semigroup CircuitInterface where
@@ -160,11 +164,17 @@ prettyCircuitInterface :: CircuitInterface -> Doc
 prettyCircuitInterface ifc = go NoStep ifc
   where go :: CircuitInterfacePath -> CircuitInterface -> Doc
         go steps (Meta (DocString str) x) =
-          text "DocString:" <+> text str <+> char '-' <+> nest 2 (go steps x)
+          braces (text "DocString:" <+> text str
+                                    <+> char '-' <+> nest 2 (go steps x))
         go steps (Meta (NameHint nm) x) =
-          text "NameHint:" <+> text nm <+> char '-' <+> nest 2 (go steps x)
+          braces (text "NameHint:" <+> text nm
+                                   <+> char '-' <+> nest 2 (go steps x))
         go steps (Meta (InstanceId i) x) =
-          text "InstanceId:" <+> int i <+> char '-' <+> nest 2 (go NoStep x)
+          braces (text "InstanceId:" <+> int i
+                                     <+> char '-' <+> nest 2 (go NoStep x))
+        go steps (Meta (Implicit tag) x) =
+          braces (text "Implicit:" <+> text tag
+                                   <+> char '-' <+> nest 2 (go NoStep x))
         go steps (Product xs) =
           sep [go (steps :|> n) x | (n, x) <- zip [0..] xs]
         go steps (Port pDir w) =
@@ -191,6 +201,10 @@ metaNameHint nm ifc = Meta (NameHint nm) ifc
 -- | Wrap a 'CircuitInterface' with an name doc string
 metaDocString :: String -> CircuitInterface -> CircuitInterface
 metaDocString docStr ifc = Meta (DocString docStr) ifc
+
+-- | Wrap a 'CircuitInterface' as "implicit" (with a tag)
+metaImplicit :: String -> CircuitInterface -> CircuitInterface
+metaImplicit tag ifc = Meta (Implicit tag) ifc
 
 -- | Flip the direction in a 'PortDir'
 flipPortDir :: PortDir -> PortDir
@@ -231,6 +245,7 @@ isCircuitInterfaceLeaf _ = True
 data CircuitLeafCtxt = CircuitLeafCtxt { mInstanceId :: Maybe InstanceId
                                        , path :: CircuitInterfacePath
                                        , nameHints :: [String]
+                                       , implicitTags :: [String]
                                        , ifc :: CircuitInterface }
                                        deriving Show
 
@@ -241,11 +256,14 @@ onCircuitInterfaceLeaves f ifc = go dfltCtxt ifc
   where dfltCtxt = CircuitLeafCtxt { mInstanceId = Nothing
                                    , path = NoStep
                                    , nameHints = []
+                                   , implicitTags = []
                                    , ifc = err "Not a leaf" }
         go ctxt (Meta (NameHint nm) x) =
           go ctxt{nameHints = nm : ctxt.nameHints} x
         go ctxt (Meta (InstanceId i) x) =
           go ctxt{mInstanceId = Just i, path = NoStep} x
+        go ctxt (Meta (Implicit tag) x) =
+          go ctxt{implicitTags = tag : ctxt.implicitTags} x
         go ctxt (Meta _ x) = go ctxt x
         go ctxt (Product xs) =
           concat [go ctxt{path = ctxt.path :|> n} x | (n, x) <- zip [0..] xs]
@@ -262,45 +280,53 @@ queryCircuitInterfaceLeaves query ifc =
 
 --------------------------------------------------------------------------------
 
--- | Get all ports of a 'CircuitInterface'
-getPorts :: CircuitInterface -> [(CircuitInterfacePath, CircuitInterface)]
-getPorts ifc =
-  [ (x, y) | (x, Just y) <- queryCircuitInterfaceLeaves exposePort ifc]
-  where exposePort p@(Port _ _) = Just p
-        exposePort _ = Nothing
+-- | Get all explicit ports of a 'CircuitInterface'
+getExplicitPorts :: CircuitInterface
+                 -> [(CircuitInterfacePath, CircuitInterface)]
+getExplicitPorts ifc =
+  [ (x, y) | (x, Just y) <- onCircuitInterfaceLeaves f ifc]
+  where f CircuitLeafCtxt{ implicitTags = []
+                         , ifc = p@(Port _ _)
+                         , .. } = (path, Just p)
+        f CircuitLeafCtxt{..} = (path, Nothing)
 
 -- Input ports
 --------------
 
--- | Get all input ports information in a 'CircuitInterface'
-getPortInsInfo :: CircuitInterface -> [(CircuitInterfacePath, BitWidth)]
-getPortInsInfo ifc =
-  [ (x, y) | (x, Just y) <- queryCircuitInterfaceLeaves exposePortIn ifc ]
-  where exposePortIn (Port In w) = Just w
-        exposePortIn _ = Nothing
+-- | Get all explicit input ports information in a 'CircuitInterface'
+getExplicitPortInsInfo :: CircuitInterface -> [(CircuitInterfacePath, BitWidth)]
+getExplicitPortInsInfo ifc =
+  [ (x, y) | (x, Just y) <- onCircuitInterfaceLeaves f ifc]
+  where f CircuitLeafCtxt{ implicitTags = []
+                         , ifc = p@(Port In w)
+                         , .. } = (path, Just w)
+        f CircuitLeafCtxt{..} = (path, Nothing)
 
--- | Get all input ports paths in a 'CircuitInterface'
-getPortInPaths :: CircuitInterface -> [CircuitInterfacePath]
-getPortInPaths = fst . unzip . getPortInsInfo
+-- | Get all explicit input ports paths in a 'CircuitInterface'
+getExplicitPortInPaths :: CircuitInterface -> [CircuitInterfacePath]
+getExplicitPortInPaths = fst . unzip . getExplicitPortInsInfo
 
--- | Get all input ports widths in a 'CircuitInterface'
-getPortInWidths :: CircuitInterface -> [BitWidth]
-getPortInWidths = snd . unzip . getPortInsInfo
+-- | Get all explicit input ports widths in a 'CircuitInterface'
+getExplicitPortInWidths :: CircuitInterface -> [BitWidth]
+getExplicitPortInWidths = snd . unzip . getExplicitPortInsInfo
 
 -- Output ports
 ---------------
 
--- | Get all output ports information in a 'CircuitInterface'
-getPortOutsInfo :: CircuitInterface -> [(CircuitInterfacePath, BitWidth)]
-getPortOutsInfo ifc =
-  [ (x, y) | (x, Just y) <- queryCircuitInterfaceLeaves exposePortOut ifc ]
-  where exposePortOut (Port Out w) = Just w
-        exposePortOut _ = Nothing
+-- | Get all explicit output ports information in a 'CircuitInterface'
+getExplicitPortOutsInfo :: CircuitInterface
+                        -> [(CircuitInterfacePath, BitWidth)]
+getExplicitPortOutsInfo ifc =
+  [ (x, y) | (x, Just y) <- onCircuitInterfaceLeaves f ifc ]
+  where f CircuitLeafCtxt{ implicitTags = []
+                         , ifc = p@(Port Out w)
+                         , .. } = (path, Just w)
+        f CircuitLeafCtxt{..} = (path, Nothing)
 
--- | Get all output ports paths in a 'CircuitInterface'
-getPortOutPaths :: CircuitInterface -> [CircuitInterfacePath]
-getPortOutPaths = fst . unzip . getPortOutsInfo
+-- | Get all explicit output ports paths in a 'CircuitInterface'
+getExplicitPortOutPaths :: CircuitInterface -> [CircuitInterfacePath]
+getExplicitPortOutPaths = fst . unzip . getExplicitPortOutsInfo
 
--- | Get all output ports widths in a 'CircuitInterface'
-getPortOutWidths :: CircuitInterface -> [BitWidth]
-getPortOutWidths = snd . unzip . getPortOutsInfo
+-- | Get all explicit output ports widths in a 'CircuitInterface'
+getExplicitPortOutWidths :: CircuitInterface -> [BitWidth]
+getExplicitPortOutWidths = snd . unzip . getExplicitPortOutsInfo

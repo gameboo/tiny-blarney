@@ -341,7 +341,7 @@ primInterface prim = (primInfo prim).interface
 
 -- | Get general info about a 'Primitive''s inputs.
 primInputsInfo :: Primitive -> [(CircuitInterfacePath, BitWidth)]
-primInputsInfo = getPortInsInfo . primInterface
+primInputsInfo = getExplicitPortInsInfo . primInterface
 
 -- | Get the 'BitWidth's of a 'Primitive''s inputs.
 primInputWidths :: Primitive -> [BitWidth]
@@ -353,7 +353,7 @@ primInputPaths = map fst . primInputsInfo
 
 -- | Get general info about a 'Primitive''s outputs.
 primOutputsInfo :: Primitive -> [(CircuitInterfacePath, BitWidth)]
-primOutputsInfo = getPortOutsInfo . primInterface
+primOutputsInfo = getExplicitPortOutsInfo . primInterface
 
 -- | Get the 'BitWidth's of a 'Primitive''s outputs.
 primOutputWidths :: Primitive -> [BitWidth]
@@ -401,7 +401,7 @@ pDoc d ifc =
 
 -- local helper to grab the first output path of an interface
 outPath :: CircuitInterface -> CircuitInterfacePath
-outPath = head . getPortOutPaths
+outPath = head . getExplicitPortOutPaths
 
 -- | document 'PrimitiveInfo' for any 'Primitive'
 primInfo :: Primitive -> PrimitiveInfo

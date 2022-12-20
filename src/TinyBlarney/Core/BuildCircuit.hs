@@ -43,7 +43,7 @@ buildCircuit nm f = buildCircuitWith nm (buildCircuitInterface f) f
 
 customInstanceWithCircuit :: GenCircuit a => Circuit -> a
 customInstanceWithCircuit circuit = genWrapper circuit inPaths []
-  where inPaths = getPortInPaths circuit.interface
+  where inPaths = getExplicitPortInPaths circuit.interface
 
 customInstanceWith :: (BuildCircuitIfc a, GenCircuit a) => String -> a -> a
 customInstanceWith nm f = customInstanceWithCircuit $ buildCircuit nm f
@@ -80,8 +80,8 @@ getCircuitRoots :: GenCircuit a => a -> CircuitInterface -> [BV]
 getCircuitRoots f ifc = res.roots
   where res = genToCircuit dfltAcc inPathAndBVs outPaths f
         inBVs = mkInterfaceBV (flipCircuitInterface ifc) res.outs
-        inPathAndBVs = zip (getPortInPaths ifc) inBVs
-        outPaths = getPortOutPaths ifc
+        inPathAndBVs = zip (getExplicitPortInPaths ifc) inBVs
+        outPaths = getExplicitPortOutPaths ifc
         dfltAcc = ToCircuitAcc { outs = [], roots = [] }
 
 -- backing recursive class implementation

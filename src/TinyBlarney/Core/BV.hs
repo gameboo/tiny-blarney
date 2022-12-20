@@ -94,9 +94,10 @@ instanceIdCnt = unsafePerformIO $ newIORef 0
 {-# NOINLINE mkPrimitive #-}
 -- | Helper function for creating an instance of a primitive component
 mkPrimitive :: Primitive -> [PathAndBV] -> [BV]
-mkPrimitive prim rcvSigs = case getPortOutPaths . primInterface $ prim of
-  [] -> [bv]
-  paths -> [ bv { exposedPath = path } | path <- paths ]
+mkPrimitive prim rcvSigs =
+  case getExplicitPortOutPaths . primInterface $ prim of
+    [] -> [bv]
+    paths -> [ bv { exposedPath = path } | path <- paths ]
   where -- | model BV
         bv = BV { instanceId = iId
                 , primitive = prim
