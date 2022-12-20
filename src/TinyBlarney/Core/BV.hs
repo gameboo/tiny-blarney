@@ -19,6 +19,7 @@ module TinyBlarney.Core.BV (
 , mkInvertBV
 , mkConcatBV
 , mkSliceBV
+, mkMergeBV
 , mkCustomBV
 , mkInterfaceBV
 , evaluateBV
@@ -104,11 +105,14 @@ mkPrimitive prim rcvSigs = case getPortOutPaths . primInterface $ prim of
         -- | For Observable Sharing.
         iId = unsafePerformIO $ atomicModifyIORef' instanceIdCnt \x -> (x+1, x)
 
+mkPrimitiveWithPaths :: Primitive -> [BV] -> [BV]
+mkPrimitiveWithPaths prim xs = mkPrimitive prim (zip (primInputPaths prim) xs)
+
 mkUnOpBV :: Primitive -> BV -> BV
-mkUnOpBV prim x = head $ mkPrimitive prim (zip (primInputPaths prim) [x])
+mkUnOpBV prim x = head $ mkPrimitiveWithPaths prim [x]
 
 mkBinOpBV :: Primitive -> BV -> BV -> BV
-mkBinOpBV prim x y = head $ mkPrimitive prim (zip (primInputPaths prim) [x, y])
+mkBinOpBV prim x y = head $ mkPrimitiveWithPaths prim [x, y]
 
 mkConstantBV :: Integer -> BitWidth -> BV
 mkConstantBV v w = head $ mkPrimitive (Constant v w) []
@@ -135,6 +139,14 @@ mkConcatBV x y = mkBinOpBV (Concatenate wx wy) x y
 
 mkSliceBV :: (Int, Int) -> BV -> BV
 mkSliceBV (hi, lo) x = mkUnOpBV (Slice (hi, lo) $ unsafeBitWidthBV x) x
+
+mkMergeBV :: MergeStrategy -> [(BV, BV)] -> BV
+mkMergeBV mStrat ins = head $ mkPrimitiveWithPaths (Merge mStrat n w) ins'
+  where n = length ins
+        w = if n > 0 then unsafeBitWidthBV (snd . head $ ins) else 0
+        -- XXX could check that all fst elemens are size one and all snd elems
+        -- are same size w
+        ins' = concatMap (\(en, x) -> [en, x]) ins
 
 mkCustomBV :: Circuit -> [PathAndBV] -> [BV]
 mkCustomBV circuit rcvSigs = mkPrimitive (Custom circuit) rcvSigs

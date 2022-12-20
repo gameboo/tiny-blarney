@@ -22,6 +22,8 @@ module TinyBlarney.Misc.PrettyHelpers.Verilog (
 , vIntLit
 , vDontCare
 , vAssign
+, vConcat
+, vReplicate
 , vFunCall
 , vModInst
 ) where
@@ -83,6 +85,12 @@ vIntLit v w = int w <> text "'h" <> hexInt v
 
 vDontCare :: VBitWidth -> Doc
 vDontCare w = int w <> text "'b" <> text (replicate w 'x')
+
+vConcat :: [Doc] -> Doc
+vConcat = braces . commaSep
+
+vReplicate :: Doc -> [Doc] -> Doc
+vReplicate n args = braces (n <> vConcat args)
 
 vAssign :: Doc -> Doc -> Doc
 vAssign lhs rhs = (text "assign" <+> lhs <+> equals <+> rhs) <> semi

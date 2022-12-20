@@ -15,6 +15,7 @@ module TinyBlarney.Core.BasicTypes (
   module TinyBlarney.Core.CircuitInterface
   -- * types
 , Primitive (..)
+, MergeStrategy (..)
 , Net (..)
 , NetPort
 , NetInput
@@ -225,6 +226,9 @@ getAllUniqueCircuits c = uniq cs
         cs = getAllCircuits c
 
 --------------------------------------------------------------------------------
+-- | Merging Strategy
+data MergeStrategy = MStratOr deriving (Eq, Show)
+
 -- | Available primitive operations.
 data Primitive =
 
@@ -276,6 +280,16 @@ data Primitive =
     --   [__outputs__] the @(hi-lo+1)@-bit wide slice of @x@ between bit indices
     --                 @hi@ and @lo@ (both included)
   | Slice (Int, Int) BitWidth
+
+    -- | @Merge mStrat n w@ represents a merging primitive with the @mStrat@
+    --   merging strategy, @n@ pairs of 1-bit enables and associated @w@-wide
+    --   inputs, and one @w@-wide output
+    --
+    --   [__inputs__]  @[en0, in0, en1, in1, ...]@, @n@ pairs of @enN@ 1-bit
+    --                 enables and @inN@ @w@-bit values
+    --   [__outputs__] a single output, a @w@-bit value result of the merging of
+    --                 the @n@ inputs according to @mStrat@
+  | Merge MergeStrategy Int BitWidth
 
     -- | A custom component
   | Custom Circuit
@@ -444,6 +458,15 @@ primInfo (Slice (hi, lo) w) = PrimitiveInfo {
     [(_, x)] -> [(outPath ifc, clamp (hi + 1) x `shiftR` lo)]
     _ -> []
 } where ifc = ifcUnaryOp w (hi-lo+1)
+primInfo (Merge mStrat n w) = PrimitiveInfo {
+  interface = ifc
+, prettyDoc = pDoc (text $ "Prim Merge." ++ show mStrat) ifc
+, evaluate = \_ -> []
+} where ifc =    metaNameHint (show mStrat ++ "Input")
+                              (Product [enIn i | i <- [0..(n-1)]])
+              <> metaNameHint (show mStrat ++ "Output") (Port Out w)
+        enIn i =    metaNameHint ("en" ++ show i) (Port In 1)
+                 <> metaNameHint ("in" ++ show i) (Port In w)
 primInfo (Custom circuit) = PrimitiveInfo {
   interface = circuit.interface
 , prettyDoc = text "Prim Custom: " <+> prettyCircuit circuit

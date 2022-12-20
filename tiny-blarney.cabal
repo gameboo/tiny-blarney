@@ -2,23 +2,6 @@ cabal-version:      3.0
 name:               tiny-blarney
 version:            0.1.0.0
 
-
-library tiny-blarney-core
-  default-language: GHC2021
-  hs-source-dirs: src
-  exposed-modules: TinyBlarney.Core
-  other-modules:
-      TinyBlarney.Core.BV
-    , TinyBlarney.Core.BasicTypes
-    , TinyBlarney.Core.Bit
-    , TinyBlarney.Core.Bits
-    , TinyBlarney.Core.BuildCircuit
-    , TinyBlarney.Core.CircuitInterface
-    , TinyBlarney.Core.FlattenBV
-    , TinyBlarney.Core.NetHelpers
-    , TinyBlarney.Misc.Misc
-  build-depends: base, containers, pretty, array, mtl
-
 library
   default-language: GHC2021
   hs-source-dirs: src
@@ -46,8 +29,7 @@ library
     , TinyBlarney.Misc.PrettyHelpers.C
     , TinyBlarney.Misc.PrettyHelpers.Verilog
   build-depends:
-      tiny-blarney-core
-    , base
+      base
     , containers
     , pretty
     , array
@@ -65,4 +47,5 @@ test-Suite tiny-blarney-tests
   other-modules:
       TinyBlarney.Tests.SimpleAndOr.Test
     , TinyBlarney.Tests.SimpleAdder.Test
+    , TinyBlarney.Tests.SimpleMerge.Test
   build-depends: tiny-blarney, Cabal, base, containers

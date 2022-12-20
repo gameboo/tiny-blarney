@@ -130,6 +130,7 @@ genNetDeclDoc n = case n.primitive of
   (Invert w) -> genIdentDecl Wire NoInitVal w nOut
   (Concatenate w0 w1) -> genIdentDecl Wire NoInitVal (w0 + w1) nOut
   (Slice (hi, lo) _) -> genIdentDecl Wire NoInitVal (hi-lo) nOut
+  (Merge MStratOr _ w) -> genIdentDecl Wire NoInitVal w nOut
   (Custom c) ->
     sep <$> mapM (\(p, w) -> genIdentDecl Wire NoInitVal w (nId, p)) nOutsInfo
   _ -> return empty
@@ -147,6 +148,7 @@ genNetInstDoc n = case n.primitive of
   (Invert _) -> instPrim
   (Concatenate _ _) -> instPrim
   (Slice _ _) -> instPrim
+  (Merge MStratOr _ _) -> instPrim
   (Custom Circuit{..}) -> do
     ins <- mapM genNetConnectionRep nConns
     outs <- mapM askIdent nOuts
@@ -212,11 +214,19 @@ genPrimRep prim ins = case (prim, ins) of
   (Concatenate _ _, [x, y]) -> do
     xDoc <- genNetConnectionRep x
     yDoc <- genNetConnectionRep y
-    return $ braces $ commaSep [xDoc, yDoc]
+    return $ vConcat [xDoc, yDoc]
   (Slice (hi, lo) _, [x]) -> do
     xDoc <- genNetConnectionRep x
     let sliceDoc = if hi == lo then int hi else int hi <> colon <> int lo
     return $ xDoc <> brackets sliceDoc
+  (Merge MStratOr n w, ins) -> do
+    let v_en en v = parens (vReplicate (int w) [en] <+> text "&" <+> v)
+    let peel [] = []
+        peel (en:v:rest) = v_en en v : peel rest
+    ins' <- mapM genNetConnectionRep ins
+    return $ (sep . punctuate (char '|')) (peel ins')
+    --return if n > 0 then foldl1 (\x y -> x <+> "|" <+> y) (peel ins')
+    --                else empty
   (_, _) -> err $ "unsupported Prim '" ++ show prim ++ "' encountered"
   where binOp op x y = do xDoc <- genNetConnectionRep x
                           yDoc <- genNetConnectionRep y
