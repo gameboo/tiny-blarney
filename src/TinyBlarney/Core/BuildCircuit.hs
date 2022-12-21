@@ -110,8 +110,7 @@ instance {-# OVERLAPPABLE #-} (Bits a) => GenCircuit a where
     where (x, _, bvs) = fromBVs $ mkCustomBV circuit (reverse rcvBVs)
           fail = err $ "leftover bvs in genWrapper call - " ++ show bvs
 
-instance (KnownNat (SizeOf a), Bits a, GenCircuit t) =>
-         GenCircuit (a -> t) where
+instance (Bits a, GenCircuit t) => GenCircuit (a -> t) where
   genToCircuit acc pbvs outPaths f =
     genToCircuit acc rest outPaths (f nextArg)
     where (ps, bvs) = unzip pbvs
