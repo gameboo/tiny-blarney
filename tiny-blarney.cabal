@@ -48,4 +48,5 @@ test-Suite tiny-blarney-tests
       TinyBlarney.Tests.SimpleAndOr.Test
     , TinyBlarney.Tests.SimpleAdder.Test
     , TinyBlarney.Tests.SimpleMerge.Test
+    , TinyBlarney.Tests.SimpleDelay.Test
   build-depends: tiny-blarney, Cabal, base, containers

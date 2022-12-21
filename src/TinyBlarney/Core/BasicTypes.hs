@@ -291,6 +291,15 @@ data Primitive =
     --                 the @n@ inputs according to @mStrat@
   | Merge MergeStrategy Int BitWidth
 
+    -- | @Register mInit w@ represents a register with a potential initial value
+    --   - if @mInit == Nothing@ the initial value is dont care
+    --   - if @mInit == Just init@ the initial value is @init@
+    --
+    --   [__inputs__]  @[x]@, a single @w@-bit value
+    --   [__outputs__] a single output, the @w@-bit value @init@ (or don't care)
+    --                 or the last written input value @x@
+  | Register (Maybe Integer) BitWidth
+
     -- | A custom component
   | Custom Circuit
 
@@ -467,6 +476,14 @@ primInfo (Merge mStrat n w) = PrimitiveInfo {
               <> metaNameHint (show mStrat ++ "Output") (Port Out w)
         enIn i =    metaNameHint ("en" ++ show i) (Port In 1)
                  <> metaNameHint ("in" ++ show i) (Port In w)
+primInfo (Register mInit w) = PrimitiveInfo {
+  interface = ifc
+, prettyDoc = pDoc (text $ "Prim Register") ifc
+, evaluate = \_ -> []
+} where ifc = Product [clk, valIn] <> valOut
+        clk = metaImplicit "Clock" $ metaNameHint "clk" (Port In 1)
+        valIn = metaNameHint "in" (Port In w)
+        valOut = metaNameHint "out" (Port Out w)
 primInfo (Custom circuit) = PrimitiveInfo {
   interface = circuit.interface
 , prettyDoc = text "Prim Custom: " <+> prettyCircuit circuit

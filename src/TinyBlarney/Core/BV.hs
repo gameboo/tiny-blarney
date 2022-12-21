@@ -20,6 +20,7 @@ module TinyBlarney.Core.BV (
 , mkConcatBV
 , mkSliceBV
 , mkMergeBV
+, mkRegisterBV
 , mkCustomBV
 , mkInterfaceBV
 , evaluateBV
@@ -148,6 +149,9 @@ mkMergeBV mStrat ins = head $ mkPrimitiveWithPaths (Merge mStrat n w) ins'
         -- XXX could check that all fst elemens are size one and all snd elems
         -- are same size w
         ins' = concatMap (\(en, x) -> [en, x]) ins
+
+mkRegisterBV :: Maybe Integer -> BitWidth -> BV -> BV
+mkRegisterBV mInit w x = mkUnOpBV (Register mInit w) x
 
 mkCustomBV :: Circuit -> [PathAndBV] -> [BV]
 mkCustomBV circuit rcvSigs = mkPrimitive (Custom circuit) rcvSigs

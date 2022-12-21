@@ -40,6 +40,7 @@ module TinyBlarney.Core.Bit (
 , bitInvert
 , bitConcat
 , bitMerge
+, bitDelay
 , unsafeBitSlice
 , unsafeFromBitList
 , unsafeToBitList
@@ -190,6 +191,10 @@ bitConcat x y = AsBit $ mkConcatBV x.bv y.bv
 bitMerge :: MergeStrategy -> [(Bit 1, Bit n)] -> Bit n
 bitMerge mStrat ins = AsBit $ mkMergeBV mStrat ins'
   where ins' = map (\(en, x) -> (en.bv, x.bv)) ins
+
+-- | @bitDelay x@ return the signal x delayed by one cycle
+bitDelay :: forall n. KnownNat n => Bit n -> Bit n
+bitDelay x = AsBit $ mkRegisterBV Nothing (valueOf @n) x.bv
 
 -- | @unsafeBitSlice (hi, lo) x@ returns the slice of @(hi-lo+1)@-bit wide slice
 --   of @x@ between bit indices @hi@ and @lo@ (both included)
