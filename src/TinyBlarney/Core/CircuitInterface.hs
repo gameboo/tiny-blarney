@@ -286,7 +286,7 @@ getImplicitPortIns :: CircuitInterface
                    -> [(CircuitInterfacePath, CircuitInterface, [String])]
 getImplicitPortIns ifc =
   [ (x, y, z) | Just (x, y, z) <- onCircuitInterfaceLeaves f ifc]
-  where f CircuitLeafCtxt{ ifc = p@(Port _ _), .. } | not (null implicitTags) =
+  where f CircuitLeafCtxt{ ifc = p@(Port In _), .. } | not (null implicitTags) =
           Just (path, p, implicitTags)
         f _ = Nothing
 
