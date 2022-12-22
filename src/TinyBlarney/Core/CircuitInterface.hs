@@ -37,6 +37,7 @@ module TinyBlarney.Core.CircuitInterface (
 , onCircuitInterfaceLeaves
 , queryCircuitInterfaceLeaves
   -- * circuit interface leaves queries
+, getImplicitPortIns
 , getExplicitPorts
 , getExplicitPortInsInfo
 , getExplicitPortInPaths
@@ -280,15 +281,25 @@ queryCircuitInterfaceLeaves query ifc =
 
 --------------------------------------------------------------------------------
 
+-- | Get all implicit input ports of a 'CircuitInterface'
+getImplicitPortIns :: CircuitInterface
+                   -> [(CircuitInterfacePath, CircuitInterface, [String])]
+getImplicitPortIns ifc =
+  [ (x, y, z) | Just (x, y, z) <- onCircuitInterfaceLeaves f ifc]
+  where f CircuitLeafCtxt{ ifc = p@(Port _ _), .. } | not (null implicitTags) =
+          Just (path, p, implicitTags)
+        f _ = Nothing
+
+--------------------------------------------------------------------------------
+
 -- | Get all explicit ports of a 'CircuitInterface'
 getExplicitPorts :: CircuitInterface
                  -> [(CircuitInterfacePath, CircuitInterface)]
 getExplicitPorts ifc =
-  [ (x, y) | (x, Just y) <- onCircuitInterfaceLeaves f ifc]
-  where f CircuitLeafCtxt{ implicitTags = []
-                         , ifc = p@(Port _ _)
-                         , .. } = (path, Just p)
-        f CircuitLeafCtxt{..} = (path, Nothing)
+  [ (x, y) | Just (x, y) <- onCircuitInterfaceLeaves f ifc]
+  where f CircuitLeafCtxt{ implicitTags = [], ifc = p@(Port _ _), .. } =
+          Just (path, p)
+        f _ = Nothing
 
 -- Input ports
 --------------
