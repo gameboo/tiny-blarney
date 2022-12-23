@@ -24,7 +24,9 @@ module TinyBlarney.Misc.PrettyHelpers.Verilog (
 , vAssign
 , vConcat
 , vReplicate
+, vBeginEnd
 , vFunCall
+, vAlwaysBlock
 , vModInst
 ) where
 
@@ -95,8 +97,17 @@ vReplicate n args = braces (n <> vConcat args)
 vAssign :: Doc -> Doc -> Doc
 vAssign lhs rhs = (text "assign" <+> lhs <+> equals <+> rhs) <> semi
 
+vBeginEnd :: [Doc] -> Doc
+vBeginEnd stmts = sep [ text "begin", nest 2 (vcat stmts), text "end" ]
+
 vFunCall :: Doc -> [Doc] -> Doc
 vFunCall funNm args = funNm  <+> parens (nest 2 $ commaSep args) <> semi
+
+vAlwaysBlock :: [Doc] -> [Doc] -> Doc
+vAlwaysBlock [] _ = empty
+vAlwaysBlock sensitivity stmts =
+  text "always" <+> char '@' <+> (parens $ commaSep sensitivity)
+                <+> vBeginEnd stmts
 
 vModInst :: VIdent -> VIdent -> [VStmt] -> VStmt
 vModInst modNm instNm args =
