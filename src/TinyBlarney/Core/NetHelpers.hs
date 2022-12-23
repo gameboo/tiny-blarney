@@ -145,4 +145,5 @@ externalNetlistInterface nl = if length ifcs == 1 then head ifcs
   where ifcs = sortOn fst [ (nId, metaInstanceId nId $ flipCircuitInterface ifc)
                           | n@Net{ instanceId = nId
                                  , primitive = Interface ifc } <- elems nl ]
-        fail = err "There should be exactly one interface per Circuit"
+        fail = err $ "There should be exactly one interface per Netlist\n"
+                     ++ show nl
