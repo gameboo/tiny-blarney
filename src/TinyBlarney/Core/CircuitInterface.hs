@@ -176,7 +176,7 @@ prettyCircuitInterface ifc = go NoStep ifc
                                      <+> char '-' <+> nest 2 (go NoStep x))
         go steps (Meta (Implicit tag) x) =
           braces (text "Implicit:" <+> text tag
-                                   <+> char '-' <+> nest 2 (go NoStep x))
+                                   <+> char '-' <+> nest 2 (go steps x))
         go steps (Product xs) =
           sep [go (steps :|> n) x | (n, x) <- zip [0..] xs]
         go steps (Port pDir w) =
