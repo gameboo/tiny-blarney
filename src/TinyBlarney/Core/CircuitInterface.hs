@@ -38,6 +38,7 @@ module TinyBlarney.Core.CircuitInterface (
 , queryCircuitInterfaceLeaves
   -- * circuit interface leaves queries
 , getImplicitPortIns
+, getImplicitPortOuts
 , getExplicitPorts
 , getExplicitPortInsInfo
 , getExplicitPortInPaths
@@ -246,7 +247,7 @@ isCircuitInterfaceLeaf _ = True
 data CircuitLeafCtxt = CircuitLeafCtxt { mInstanceId :: Maybe InstanceId
                                        , path :: CircuitInterfacePath
                                        , nameHints :: [String]
-                                       , implicitTags :: [String]
+                                       , implicitTag :: Maybe String
                                        , ifc :: CircuitInterface }
                                        deriving Show
 
@@ -257,14 +258,14 @@ onCircuitInterfaceLeaves f ifc = go dfltCtxt ifc
   where dfltCtxt = CircuitLeafCtxt { mInstanceId = Nothing
                                    , path = NoStep
                                    , nameHints = []
-                                   , implicitTags = []
+                                   , implicitTag = Nothing
                                    , ifc = err "Not a leaf" }
         go ctxt (Meta (NameHint nm) x) =
           go ctxt{nameHints = nm : ctxt.nameHints} x
         go ctxt (Meta (InstanceId i) x) =
           go ctxt{mInstanceId = Just i, path = NoStep} x
-        go ctxt (Meta (Implicit tag) x) =
-          go ctxt{implicitTags = tag : ctxt.implicitTags} x
+        -- Note: only the nested-most implicit tag counts
+        go ctxt (Meta (Implicit tag) x) = go ctxt{implicitTag = Just tag} x
         go ctxt (Meta _ x) = go ctxt x
         go ctxt (Product xs) =
           concat [go ctxt{path = ctxt.path :|> n} x | (n, x) <- zip [0..] xs]
@@ -283,11 +284,20 @@ queryCircuitInterfaceLeaves query ifc =
 
 -- | Get all implicit input ports of a 'CircuitInterface'
 getImplicitPortIns :: CircuitInterface
-                   -> [(CircuitInterfacePath, CircuitInterface, [String])]
+                   -> [(CircuitInterfacePath, CircuitInterface, String)]
 getImplicitPortIns ifc =
-  [ (x, y, z) | Just (x, y, z) <- onCircuitInterfaceLeaves f ifc]
-  where f CircuitLeafCtxt{ ifc = p@(Port In _), .. } | not (null implicitTags) =
-          Just (path, p, implicitTags)
+  [ (x, y, z) | Just (x, y, z) <- onCircuitInterfaceLeaves f ifc ]
+  where f CircuitLeafCtxt{ ifc = p@(Port In _), implicitTag = Just tag, .. } =
+          Just (path, p, tag)
+        f _ = Nothing
+
+-- | Get all implicit output ports of a 'CircuitInterface'
+getImplicitPortOuts :: CircuitInterface
+                    -> [(CircuitInterfacePath, CircuitInterface, String)]
+getImplicitPortOuts ifc =
+  [ (x, y, z) | Just (x, y, z) <- onCircuitInterfaceLeaves f ifc ]
+  where f CircuitLeafCtxt{ ifc = p@(Port Out _), implicitTag = Just tag, .. } =
+          Just (path, p, tag)
         f _ = Nothing
 
 --------------------------------------------------------------------------------
@@ -297,7 +307,7 @@ getExplicitPorts :: CircuitInterface
                  -> [(CircuitInterfacePath, CircuitInterface)]
 getExplicitPorts ifc =
   [ (x, y) | Just (x, y) <- onCircuitInterfaceLeaves f ifc]
-  where f CircuitLeafCtxt{ implicitTags = [], ifc = p@(Port _ _), .. } =
+  where f CircuitLeafCtxt{ implicitTag = Nothing, ifc = p@(Port _ _), .. } =
           Just (path, p)
         f _ = Nothing
 
@@ -308,7 +318,7 @@ getExplicitPorts ifc =
 getExplicitPortInsInfo :: CircuitInterface -> [(CircuitInterfacePath, BitWidth)]
 getExplicitPortInsInfo ifc =
   [ (x, y) | (x, Just y) <- onCircuitInterfaceLeaves f ifc]
-  where f CircuitLeafCtxt{ implicitTags = []
+  where f CircuitLeafCtxt{ implicitTag = Nothing
                          , ifc = p@(Port In w)
                          , .. } = (path, Just w)
         f CircuitLeafCtxt{..} = (path, Nothing)
@@ -329,7 +339,7 @@ getExplicitPortOutsInfo :: CircuitInterface
                         -> [(CircuitInterfacePath, BitWidth)]
 getExplicitPortOutsInfo ifc =
   [ (x, y) | (x, Just y) <- onCircuitInterfaceLeaves f ifc ]
-  where f CircuitLeafCtxt{ implicitTags = []
+  where f CircuitLeafCtxt{ implicitTag = Nothing
                          , ifc = p@(Port Out w)
                          , .. } = (path, Just w)
         f CircuitLeafCtxt{..} = (path, Nothing)
