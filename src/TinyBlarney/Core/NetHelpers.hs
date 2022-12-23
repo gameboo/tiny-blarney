@@ -25,6 +25,7 @@ import TinyBlarney.Core.BasicTypes
 import Data.Map hiding (elems)
 import Data.List
 import Data.Array
+import Data.Maybe
 import Text.PrettyPrint
 
 -- | local error helper function
@@ -117,11 +118,11 @@ interfaceNamesWith :: ([String] -> Maybe String) -> Maybe String
                    -> Map CircuitInterfacePath String
 interfaceNamesWith deriveName mPfx ifc = fromList names
   where names = onCircuitInterfaceLeaves f ifc
-        f ctxt = (ctxt.path, pfx ++ show ctxt.path ++ sfx ctxt.nameHints)
-        pfx = case mPfx of Just s -> s ++ "_"
-                           _ -> ""
-        sfx xs = case deriveName xs of Just s -> "_" ++ s
-                                       _ -> ""
+        f ctxt = ( ctxt.path
+                 , intercalate "_" $ catMaybes [ mPfx
+                                               , Just $ show ctxt.path
+                                               , ctxt.implicitTag
+                                               , deriveName ctxt.nameHints ] )
 
 -- | Derive a map of names given a 'CircuitInterface'.
 interfaceNames :: Maybe String -> CircuitInterface
