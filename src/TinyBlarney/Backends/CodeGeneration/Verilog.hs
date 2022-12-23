@@ -131,6 +131,7 @@ genNetDeclDoc n = case n.primitive of
   (Concatenate w0 w1) -> genIdentDecl Wire NoInitVal (w0 + w1) nOut
   (Slice (hi, lo) _) -> genIdentDecl Wire NoInitVal (hi-lo) nOut
   (Merge MStratOr _ w) -> genIdentDecl Wire NoInitVal w nOut
+  (Register _ w) -> genIdentDecl Reg NoInitVal w nOut
   (Custom c) ->
     sep <$> mapM (\(p, w) -> genIdentDecl Wire NoInitVal w (nId, p)) nOutsInfo
   _ -> return empty
@@ -175,11 +176,19 @@ genNetInstDoc n = case n.primitive of
 -- | Code generation for Verilog always block statements
 genNetAlwsDoc :: Net -> GenNetDocs Doc
 genNetAlwsDoc n = case n.primitive of
+  (Register _ w) -> do
+    valOut <- askIdent (netOutput n)
+    let nConns = snd <$> n.inputConnections
+    valIns <- mapM genNetConnectionRep nConns
+    return $ vAlwaysBlock [text "posedge" <+> valIns !! 0]
+                          [text valOut <+> text "<=" <+> valIns !! 1 <> semi]
+    -- return ([nConns !! 0], text valOut <+> text "<=" <+> valIns !! 1 <> semi)
   _ -> return empty
 
 -- | Code generation for Verilog reset statements
 genNetRstDoc :: Net -> GenNetDocs Doc
 genNetRstDoc n = case n.primitive of
+  (Register (Just _) w) -> err "TODO: Register with reset value"
   _ -> return empty
 
 --------------------------------------------------------------------------------
