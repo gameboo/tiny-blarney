@@ -30,5 +30,5 @@ test = TestInstance {
   , options = []
   , setOption = \_ _ -> Right test
   }
-  where c = buildCircuit "delay" (bitDelay @8)
+  where c = buildCircuit "delay" (bitDelay @8 . bitDelay @8 . bitDelay @8)
         vs = generateVerilog c
