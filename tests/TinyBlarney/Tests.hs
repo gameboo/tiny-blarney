@@ -8,11 +8,7 @@ import TinyBlarney.Tests.SimpleDelay.Test as SimpleDelay
 
 tests :: IO [Test]
 tests = return [ simpleTests ]
-  where simpleTests = testGroup "simple tests" [ Test SimpleDelay.test ]
-
---tests :: IO [Test]
---tests = return [ simpleTests ]
---  where simpleTests = testGroup "simple tests" [ Test SimpleAndOr.test
---                                               , Test SimpleAdder.test
---                                               , Test SimpleMerge.test
---                                               , Test SimpleDelay.test ]
+  where simpleTests = testGroup "simple tests" [ Test SimpleAndOr.test
+                                               , Test SimpleAdder.test
+                                               , Test SimpleMerge.test
+                                               , Test SimpleDelay.test ]
