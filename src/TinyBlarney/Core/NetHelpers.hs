@@ -9,6 +9,7 @@ module TinyBlarney.Core.NetHelpers (
 , netOutputs
 , netOutput
 , netPorts
+, netConnectionPorts
 , remapNetConnectionInstanceId
 , remapNetInputConnectionInstanceId
 , remapNetInstanceId
@@ -66,6 +67,12 @@ netOutput = head . netOutputs
 -- | get the 'NetPort's of a 'Net'
 netPorts :: Net -> [NetPort]
 netPorts n = netInputs n ++ netOutputs n
+
+-- | get the 'NetPort's of a 'NetConnection'
+netConnectionPorts :: NetConnection -> [NetPort]
+netConnectionPorts (NetConnection p) = [p]
+netConnectionPorts (NetConnectionInlined _ conns) =
+  concatMap netConnectionPorts conns
 
 -- | Helper function remap the 'InstanceId's of a 'NetConnection'
 remapNetConnectionInstanceId :: (InstanceId -> InstanceId) -> NetConnection
