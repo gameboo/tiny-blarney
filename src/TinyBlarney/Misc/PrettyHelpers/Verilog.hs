@@ -98,16 +98,17 @@ vAssign :: Doc -> Doc -> Doc
 vAssign lhs rhs = (text "assign" <+> lhs <+> equals <+> rhs) <> semi
 
 vBeginEnd :: [Doc] -> Doc
-vBeginEnd stmts = sep [ text "begin", nest 2 (vcat stmts), text "end" ]
+vBeginEnd stmts = text "begin" $$ nest 2 (vcat stmts) $$ text "end"
 
 vFunCall :: Doc -> [Doc] -> Doc
 vFunCall funNm args = funNm  <+> parens (nest 2 $ commaSep args) <> semi
 
 vAlwaysBlock :: [Doc] -> [Doc] -> Doc
 vAlwaysBlock [] _ = empty
-vAlwaysBlock sensitivity stmts =
-  text "always" <+> char '@' <+> (parens $ commaSep sensitivity)
-                <+> vBeginEnd stmts
+vAlwaysBlock sensitivity stmts = sep [header, nest 2 (vcat stmts), footer]
+  where header = text "always" <+> char '@' <> (parens $ commaSep sensitivity)
+                               <+> text "begin"
+        footer = text "end"
 
 vModInst :: VIdent -> VIdent -> [VStmt] -> VStmt
 vModInst modNm instNm args =
