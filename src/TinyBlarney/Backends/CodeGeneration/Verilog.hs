@@ -1,6 +1,7 @@
-{-# LANGUAGE BlockArguments      #-}
-{-# LANGUAGE RecordWildCards     #-}
-{-# LANGUAGE OverloadedRecordDot #-}
+{-# LANGUAGE BlockArguments        #-}
+{-# LANGUAGE RecordWildCards       #-}
+{-# LANGUAGE OverloadedRecordDot   #-}
+{-# LANGUAGE DuplicateRecordFields #-}
 
 {- |
 
@@ -21,13 +22,16 @@ import TinyBlarney.Core as BC
 import TinyBlarney.Misc.PrettyHelpers.Verilog as PPV
 
 import Prelude hiding ((<>))
+import Prelude qualified as P
 import Data.List
-import Data.Map qualified as M
+import Data.Map qualified as Map
 import Data.Array
 import Data.Maybe
 import Data.Foldable
 import Data.Sequence qualified as Seq
 import Control.Monad.Reader
+import Control.Monad.State
+import Control.Monad.Identity
 import Numeric (showHex)
 import Text.PrettyPrint
 
@@ -39,9 +43,9 @@ err m = error $ "TinyBlarney.Backends.CodeGeneration.Verilog: " ++ m
 --------------------------------------------------------------------------------
 
 -- | Generate all Verilog code for a 'Circuit'
-generateVerilog :: Circuit -> M.Map String String
-generateVerilog c = M.fromList [ (c'.name, generateTopVerilog c')
-                               | c' <- getAllUniqueCircuits c ]
+generateVerilog :: Circuit -> Map.Map String String
+generateVerilog c = Map.fromList [ (c'.name, generateTopVerilog c')
+                                 | c' <- getAllUniqueCircuits c ]
 
 -- | Generate Verilog code for the top entity of a 'Circuit'
 generateTopVerilog :: Circuit -> String
@@ -70,7 +74,7 @@ prettyVerilogModule Circuit{ backingImplementation = Netlist netlist, .. } =
     -- Interface ports
     ifcPort ctxt@CircuitLeafCtxt{..} = case (mInstanceId, ifc) of
       (Just nId, Port pDir w) ->
-        (toVPDir pDir, w, fromMaybe fail $ M.lookup (nId, path) netnames)
+        (toVPDir pDir, w, fromMaybe fail $ Map.lookup (nId, path) netnames)
       (_, _) -> fail
       where
         fail = err $ "Could not identify interface port, ctxt: " ++ show ctxt
@@ -81,68 +85,100 @@ prettyVerilogModule Circuit{ backingImplementation = Netlist netlist, .. } =
     netnames = netlistNames netlist
     -- Verilog declarations, instances and always blocks ...
     -- generate the 'Doc's for the netlist
-    netDocs = genAllNetDocs Env { netlist = netlist
-                                , netnames = netnames }
+    netDocs = getNetDocs Env { netlist = netlist
+                             , netnames = netnames }
     -- extract the verilog statements
-    declDoc = sep $ (\x -> x.decl) <$> netDocs
-    instDoc = sep $ (\x -> x.inst) <$> netDocs
-    alwsDoc = sep $ (\x -> x.alws) <$> netDocs
-    rstDoc = sep $ (\x -> x.rst) <$> netDocs -- TODO use reset blocks
+    declDoc = sep $ netDocs.decls
+    instDoc = sep $ netDocs.insts
+    alwsDoc = vcat [ vAlwaysBlock ((text "posedge" <+>) <$> sensitivity) stmts
+                   | (sensitivity, stmts) <- netDocs.alws ]
+    -- TODO handle resets
 
 prettyVerilogModule circuit =
   err $ "cannot generate verilog for circuit without netlist - " ++ show circuit
 
 --------------------------------------------------------------------------------
 -- NetDocs helper type
-data NetDocs = NetDocs { decl :: Doc
-                       , inst :: Doc
-                       , alws :: Doc
-                       , rst  :: Doc } deriving Show
-
--- | NetDocs generator monad
-type GenNetDocs = Reader Env
+data NetDocs = NetDocs { decls :: [Doc]
+                       , insts :: [Doc]
+                       , alws  :: [([Doc],[Doc])] } deriving Show
 
 -- | NetDocs generator reader monad environment
 data Env = Env { netlist :: Netlist
-               , netnames :: M.Map NetOutput String }
+               , netnames :: Map.Map NetOutput String }
 
-genAllNetDocs :: Env -> [NetDocs]
-genAllNetDocs env = runReader (mapM genNetDocs $ elems env.netlist) env
+-- | Gather the 'NetDocs' from the 'Env' using the generator monad
+getNetDocs :: Env -> NetDocs
+getNetDocs env = runIdentity $ runReaderT (evalStateT (runGen genAllNets) mempty) env
 
-genNetDocs :: Net -> GenNetDocs NetDocs
-genNetDocs n = do newDecl <- genNetDeclDoc n
-                  newInst <- genNetInstDoc n
-                  newAlws <- genNetAlwsDoc n
-                  newRst  <- genNetRstDoc n
-                  return NetDocs { decl = newDecl
-                                 , inst = newInst
-                                 , alws = newAlws
-                                 , rst  = newRst }
+-- | NetDocs generator monad
+type GenR = Env
+data GenS = GenS {
+    decls :: Seq.Seq Doc
+  , insts :: Seq.Seq Doc
+  , alws  :: Map.Map [NetPort] (Seq.Seq Doc)
+  } deriving Show
+instance Semigroup GenS where
+  x <> y = GenS { decls = x.decls Seq.>< y.decls
+                , insts = x.insts Seq.>< y.insts
+                , alws = Map.unionWith (Seq.><) x.alws y.alws }
+instance Monoid GenS where
+  mempty = GenS { decls = mempty
+                , insts = mempty
+                , alws  = mempty }
+newtype Gen a = Gen {
+  runGen :: StateT GenS (ReaderT GenR Identity) a
+} deriving (Functor, Applicative, Monad, MonadReader GenR, MonadState GenS)
+
+genAllNets :: Gen NetDocs
+genAllNets = do
+  env <- ask
+  mapM_ addNet $ elems env.netlist
+  s <- get
+  alwsBlocks <- sequence [ do xs' <- mapM askIdent xs
+                              return (text <$> xs', toList ys)
+                         | (xs, ys) <- Map.toList s.alws ]
+  return NetDocs { decls = toList s.decls
+                 , insts = toList s.insts
+                 , alws  = alwsBlocks }
+
+addNet :: Net -> Gen ()
+addNet n = do
+  mNetDecl <- genNetDecl n
+  mNetInst <- genNetInst n
+  mNetAlws <- genNetAlws n
+  modify' \s ->
+    GenS { decls = maybe s.decls (Seq.<| s.decls) mNetDecl
+         , insts = maybe s.insts (Seq.<| s.insts) mNetInst
+         , alws  = maybe s.alws
+                         (\(k, v) -> Map.insertWith (Seq.><) k v s.alws)
+                         mNetAlws }
 
 -- | Code generation for Verilog declarations
-genNetDeclDoc :: Net -> GenNetDocs Doc
-genNetDeclDoc n = case n.primitive of
-  (Constant k w) -> genIdentDecl Wire (IntInitVal k) w nOut
-  (DontCare w) -> genIdentDecl Wire DontCareInitVal w nOut
-  (And w) -> genIdentDecl Wire NoInitVal w nOut
-  (Or w) -> genIdentDecl Wire NoInitVal w nOut
-  (Xor w) -> genIdentDecl Wire NoInitVal w nOut
-  (Invert w) -> genIdentDecl Wire NoInitVal w nOut
-  (Concatenate w0 w1) -> genIdentDecl Wire NoInitVal (w0 + w1) nOut
-  (Slice (hi, lo) _) -> genIdentDecl Wire NoInitVal (hi-lo) nOut
-  (Merge MStratOr _ w) -> genIdentDecl Wire NoInitVal w nOut
-  (Register _ w) -> genIdentDecl Reg NoInitVal w nOut
+genNetDecl :: Net -> Gen (Maybe Doc)
+genNetDecl n = case n.primitive of
+  (Constant k w) -> Just <$> genIdentDecl Wire (IntInitVal k) w nOut
+  (DontCare w) -> Just <$> genIdentDecl Wire DontCareInitVal w nOut
+  (And w) -> Just <$> genIdentDecl Wire NoInitVal w nOut
+  (Or w) -> Just <$> genIdentDecl Wire NoInitVal w nOut
+  (Xor w) -> Just <$> genIdentDecl Wire NoInitVal w nOut
+  (Invert w) -> Just <$> genIdentDecl Wire NoInitVal w nOut
+  (Concatenate w0 w1) -> Just <$> genIdentDecl Wire NoInitVal (w0 + w1) nOut
+  (Slice (hi, lo) _) -> Just <$> genIdentDecl Wire NoInitVal (hi-lo) nOut
+  (Merge MStratOr _ w) -> Just <$> genIdentDecl Wire NoInitVal w nOut
+  (Register _ w) -> Just <$> genIdentDecl Reg NoInitVal w nOut
   (Custom c) ->
-    sep <$> mapM (\(p, w) -> genIdentDecl Wire NoInitVal w (nId, p)) nOutsInfo
-  _ -> return empty
+    Just <$> sep <$> mapM (\(p, w) -> genIdentDecl Wire NoInitVal w (nId, p))
+                          nOutsInfo
+  _ -> return Nothing
   where nId = n.instanceId
         nOut = netOutput n
         nOutsInfo = netOutputsInfo n
 
 
 -- | Code generation for Verilog instantiations
-genNetInstDoc :: Net -> GenNetDocs Doc
-genNetInstDoc n = case n.primitive of
+genNetInst :: Net -> Gen (Maybe Doc)
+genNetInst n = case n.primitive of
   (And _) -> instPrim
   (Or _) -> instPrim
   (Xor _) -> instPrim
@@ -153,19 +189,20 @@ genNetInstDoc n = case n.primitive of
   (Custom Circuit{..}) -> do
     ins <- mapM genNetConnectionRep nConns
     outs <- mapM askIdent nOuts
-    return $ vModInst name (name ++ "_net" ++ show n.instanceId)
-                           (ins ++ (text <$> outs))
+    return . Just $ vModInst name (name ++ "_net" ++ show n.instanceId)
+                                  (ins ++ (text <$> outs))
   (Interface ifc) -> do
     let rets = sortOn snd $ netInputs n
     let args = sortOn fst $ n.inputConnections
-    sep <$> (zipWithM instConn rets args)
-  _ -> return empty
+    instConns <- sep <$> zipWithM instConn rets args
+    return $ Just instConns
+  _ -> return Nothing
   where
     nConns = snd <$> n.inputConnections
     nOuts = netOutputs n
     instPrim = do identDoc <- text <$> askIdent (netOutput n)
                   primDoc <- genPrimRep n.primitive nConns
-                  return $ vAssign identDoc primDoc
+                  return . Just $ vAssign identDoc primDoc
     instConn nPort@(_, p0) (p1, nConn) | p0 == p1 = do
       identDoc <- text <$> askIdent nPort
       valDoc <- genNetConnectionRep nConn
@@ -174,45 +211,44 @@ genNetInstDoc n = case n.primitive of
       err $ "mismatched exported signal for " ++ show n
 
 -- | Code generation for Verilog always block statements
-genNetAlwsDoc :: Net -> GenNetDocs Doc
-genNetAlwsDoc n = case n.primitive of
+genNetAlws :: Net -> Gen (Maybe ([NetPort], Seq.Seq Doc))
+genNetAlws n = case n.primitive of
   (Register _ w) -> do
     valOut <- askIdent (netOutput n)
     let nConns = snd <$> n.inputConnections
     valIns <- mapM genNetConnectionRep nConns
-    return $ vAlwaysBlock [text "posedge" <+> valIns !! 0]
-                          [text valOut <+> text "<=" <+> valIns !! 1 <> semi]
-    -- return ([nConns !! 0], text valOut <+> text "<=" <+> valIns !! 1 <> semi)
-  _ -> return empty
+    let stmt = text valOut <+> text "<=" <+> valIns !! 1 <> semi
+    return $ Just (netConnectionPorts (nConns !! 0), Seq.singleton stmt)
+  _ -> return Nothing
 
 -- | Code generation for Verilog reset statements
-genNetRstDoc :: Net -> GenNetDocs Doc
-genNetRstDoc n = case n.primitive of
+genNetRst :: Net -> Gen (Maybe Doc)
+genNetRst n = case n.primitive of
   (Register (Just _) w) -> err "TODO: Register with reset value"
-  _ -> return empty
+  _ -> return Nothing
 
 --------------------------------------------------------------------------------
 
 -- Verilog identifier declaration
 genIdentDecl :: VWireOrReg -> VInitVal -> BitWidth -> NetOutput
-             -> GenNetDocs Doc
+             -> Gen Doc
 genIdentDecl wireOrReg initVal w nOut = do
   ident <- askIdent nOut
   return $ vIdentDef ident wireOrReg w initVal
 
 -- | Get a verilog identifier out of the net name map
-askIdent :: NetPort -> GenNetDocs String
+askIdent :: NetPort -> Gen String
 askIdent nPort = do
   env <- ask
-  case M.lookup nPort env.netnames of
+  case Map.lookup nPort env.netnames of
     Just name -> return name
     _ -> err $ "name for " ++ show nPort ++ " not in\n" ++ show env.netnames
 
-genNetConnectionRep :: NetConnection -> GenNetDocs Doc
+genNetConnectionRep :: NetConnection -> Gen Doc
 genNetConnectionRep (NetConnection netOut) = text <$> askIdent netOut
 genNetConnectionRep (NetConnectionInlined p ins) = parens <$> genPrimRep p ins
 
-genPrimRep :: Primitive -> [NetConnection] -> GenNetDocs Doc
+genPrimRep :: Primitive -> [NetConnection] -> Gen Doc
 genPrimRep prim ins = case (prim, ins) of
   (Constant k w, []) -> return $ vIntLit k w
   (DontCare w, []) -> return $ vDontCare w
