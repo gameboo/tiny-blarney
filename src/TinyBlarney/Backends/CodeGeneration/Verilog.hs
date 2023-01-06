@@ -30,7 +30,7 @@ import Data.Maybe
 import Data.Foldable
 import Data.Sequence qualified as Seq
 import Control.Monad.Reader
-import Control.Monad.State
+import Control.Monad.Writer hiding ((<>))
 import Control.Monad.Identity
 import Numeric (showHex)
 import Text.PrettyPrint
@@ -109,37 +109,36 @@ data Env = Env { netlist :: Netlist
 
 -- | Gather the 'NetDocs' from the 'Env' using the generator monad
 getNetDocs :: Env -> NetDocs
-getNetDocs env = runIdentity $ runReaderT (evalStateT (runGen genAllNets) mempty) env
+getNetDocs = fst . runIdentity . runWriterT . runReaderT (runGen genAllNets)
 
 -- | NetDocs generator monad
 type GenR = Env
-data GenS = GenS {
+data GenW = GenW {
     decls :: Seq.Seq Doc
   , insts :: Seq.Seq Doc
   , alws  :: Map.Map [NetPort] (Seq.Seq Doc)
   } deriving Show
-instance Semigroup GenS where
-  x <> y = GenS { decls = x.decls Seq.>< y.decls
+instance Semigroup GenW where
+  x <> y = GenW { decls = x.decls Seq.>< y.decls
                 , insts = x.insts Seq.>< y.insts
                 , alws = Map.unionWith (Seq.><) x.alws y.alws }
-instance Monoid GenS where
-  mempty = GenS { decls = mempty
+instance Monoid GenW where
+  mempty = GenW { decls = mempty
                 , insts = mempty
                 , alws  = mempty }
 newtype Gen a = Gen {
-  runGen :: StateT GenS (ReaderT GenR Identity) a
-} deriving (Functor, Applicative, Monad, MonadReader GenR, MonadState GenS)
+  runGen :: ReaderT GenR (WriterT GenW Identity) a
+} deriving (Functor, Applicative, Monad, MonadReader GenR, MonadWriter GenW)
 
 genAllNets :: Gen NetDocs
 genAllNets = do
   env <- ask
-  mapM_ addNet $ elems env.netlist
-  s <- get
+  (_, w) <- listen $ mapM_ addNet (elems env.netlist)
   alwsBlocks <- sequence [ do xs' <- mapM askIdent xs
                               return (text <$> xs', toList ys)
-                         | (xs, ys) <- Map.toList s.alws ]
-  return NetDocs { decls = toList s.decls
-                 , insts = toList s.insts
+                         | (xs, ys) <- Map.toList w.alws ]
+  return NetDocs { decls = toList w.decls
+                 , insts = toList w.insts
                  , alws  = alwsBlocks }
 
 addNet :: Net -> Gen ()
@@ -147,12 +146,9 @@ addNet n = do
   mNetDecl <- genNetDecl n
   mNetInst <- genNetInst n
   mNetAlws <- genNetAlws n
-  modify' \s ->
-    GenS { decls = maybe s.decls (Seq.<| s.decls) mNetDecl
-         , insts = maybe s.insts (Seq.<| s.insts) mNetInst
-         , alws  = maybe s.alws
-                         (\(k, v) -> Map.insertWith (Seq.><) k v s.alws)
-                         mNetAlws }
+  tell GenW { decls = maybe mempty Seq.singleton mNetDecl
+            , insts = maybe mempty Seq.singleton mNetInst
+            , alws  = maybe mempty (uncurry Map.singleton) mNetAlws }
 
 -- | Code generation for Verilog declarations
 genNetDecl :: Net -> Gen (Maybe Doc)
