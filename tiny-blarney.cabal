@@ -40,7 +40,8 @@ library
     , filepath
     , directory
 
-test-Suite tiny-blarney-tests
+test-suite tiny-blarney-tests
+  type: detailed-0.9
   default-language: GHC2021
   hs-source-dirs: tests
   test-module: TinyBlarney.Tests
