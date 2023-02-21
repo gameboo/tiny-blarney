@@ -12,15 +12,12 @@ a subset of relevant functionalities.
 -}
 
 module TinyBlarney.Core (
-  module TinyBlarney.Core.Bit
-, Bits (SizeOf, sizeOf, pack, unpack)
-, module TinyBlarney.Core.BuildCircuit
-, module TinyBlarney.Core.BasicTypes
-, module TinyBlarney.Core.NetHelpers
+  Bits (SizeOf, sizeOf, pack, unpack)
+, module ReExport
 ) where
 
-import TinyBlarney.Core.Bit
-import TinyBlarney.Core.Bits
-import TinyBlarney.Core.BuildCircuit
-import TinyBlarney.Core.BasicTypes
-import TinyBlarney.Core.NetHelpers
+import TinyBlarney.Core.Bit as ReExport
+import TinyBlarney.Core.Bits as ReExport
+import TinyBlarney.Core.BuildCircuit as ReExport
+import TinyBlarney.Core.BasicTypes as ReExport
+import TinyBlarney.Core.NetHelpers as ReExport
