@@ -29,6 +29,7 @@ import Data.Array
 import Data.Maybe
 import Data.Foldable
 import Data.Sequence qualified as Seq
+import Control.Monad
 import Control.Monad.Reader
 import Control.Monad.Writer hiding ((<>))
 import Control.Monad.Identity
