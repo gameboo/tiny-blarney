@@ -9,6 +9,9 @@ Module      : TinyBlarney.Core.BasicTypes
 Description : TinyBlarney's basic types used in its "core" module
 Stability   : experimental
 
+This module provides basic types, helpers and other primitives used throughout
+TinyBlarney.
+
 -}
 
 module TinyBlarney.Core.BasicTypes (
